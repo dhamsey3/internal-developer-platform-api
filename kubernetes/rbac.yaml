@@ -1,0 +1,29 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: idp-api
+  namespace: default
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  namespace: default
+  name: idp-api-role
+rules:
+- apiGroups: [""]
+  resources: ["pods", "services", "namespaces"]
+  verbs: ["get", "list", "create", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: idp-api-rolebinding
+  namespace: default
+subjects:
+- kind: ServiceAccount
+  name: idp-api
+  namespace: default
+roleRef:
+  kind: Role
+  name: idp-api-role
+  apiGroup: rbac.authorization.k8s.io

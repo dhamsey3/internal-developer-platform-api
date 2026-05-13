@@ -1,0 +1,39 @@
+replicaCount: 2
+image:
+  repository: your-docker-repo/idp-api
+  tag: latest
+  pullPolicy: IfNotPresent
+service:
+  type: ClusterIP
+  port: 8000
+config:
+  environment: production
+  awsRegion: us-east-1
+  defaultIngressDomain: apps.example.com
+  kubernetesDryRun: "false"
+  terraformDryRun: "false"
+secrets:
+  databaseUrl: ""
+  redisUrl: "redis://redis-master:6379/0"
+  secretKey: ""
+ingress:
+  enabled: true
+  className: "nginx"
+  hosts:
+    - host: idp.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
