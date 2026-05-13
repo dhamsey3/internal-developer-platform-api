@@ -1,0 +1,4 @@
+apiVersion: v2
+name: idp-api
+version: 0.1.0
+description: A Helm chart for the Cloud Infrastructure Provisioning API

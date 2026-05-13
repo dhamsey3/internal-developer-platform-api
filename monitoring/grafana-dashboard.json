@@ -1,0 +1,24 @@
+{
+  "dashboard": {
+    "id": null,
+    "title": "IDP API Overview",
+    "panels": [
+      {
+        "type": "graph",
+        "title": "Request Rate",
+        "targets": [
+          { "expr": "rate(http_requests_total[5m])", "format": "time_series" }
+        ],
+        "datasource": "Prometheus"
+      },
+      {
+        "type": "graph",
+        "title": "Error Rate",
+        "targets": [
+          { "expr": "rate(http_requests_total{status=\"500\"}[5m])", "format": "time_series" }
+        ],
+        "datasource": "Prometheus"
+      }
+    ]
+  }
+}
