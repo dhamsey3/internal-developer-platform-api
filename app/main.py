@@ -1,4 +1,6 @@
 from fastapi import Depends, FastAPI
+from fastapi.responses import RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from api.routes import auth, infrastructure, deployments, kubernetes, monitoring
 from auth.rate_limit import rate_limiter
 from app.config import settings
@@ -40,6 +42,7 @@ app.include_router(kubernetes.router, prefix="/kubernetes", tags=["kubernetes"],
 app.include_router(monitoring.router, prefix="/monitoring", tags=["monitoring"], dependencies=[Depends(rate_limiter)])
 app.include_router(kubernetes.router, tags=["kubernetes"], dependencies=[Depends(rate_limiter)])
 app.include_router(monitoring.router, tags=["monitoring"], dependencies=[Depends(rate_limiter)])
+app.mount("/dashboard", StaticFiles(directory="web", html=True), name="dashboard")
 
 
 @app.get("/healthz")
@@ -55,3 +58,8 @@ def readiness_check():
         "kubernetes_dry_run": settings.KUBERNETES_DRY_RUN,
         "terraform_dry_run": settings.TERRAFORM_DRY_RUN,
     }
+
+
+@app.get("/")
+def root():
+    return RedirectResponse(url="/dashboard/")

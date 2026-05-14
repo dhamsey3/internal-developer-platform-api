@@ -23,6 +23,7 @@ api/              Route handlers and Pydantic schemas
 auth/             JWT, RBAC, rate limiting
 database/         SQLAlchemy models and session lifecycle
 services/         Kubernetes, Terraform, deployment, monitoring logic
+web/              Developer dashboard served by FastAPI
 kubernetes/       Cluster RBAC and network policy examples
 terraform/        AWS Terraform templates
 helm/             Helm chart for the API itself
@@ -66,6 +67,8 @@ Monitoring:
 
 Swagger/OpenAPI is available at `/docs`.
 
+The developer dashboard is available at `/dashboard/`.
+
 ## Local Development
 
 Create an environment file:
@@ -89,6 +92,14 @@ python3 -m venv .venv
 ./.venv/bin/pip install -r requirements.txt
 ./.venv/bin/uvicorn app.main:app --reload
 ```
+
+Open the dashboard:
+
+```text
+http://127.0.0.1:8000/dashboard/
+```
+
+The dashboard lets developers register/login, deploy Docker images, see app status, delete deployments, and fetch pod logs.
 
 Register and log in:
 
