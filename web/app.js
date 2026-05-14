@@ -2,6 +2,7 @@ const state = {
   token: localStorage.getItem("cloudforge_token") || "",
   mode: "login",
   catalog: { apps: [], images: [] },
+  selectedTemplate: null,
 };
 
 const elements = {
@@ -89,6 +90,7 @@ async function loadCatalog() {
 
 function applyTemplate(templateId) {
   const template = state.catalog.apps.find((app) => app.id === templateId);
+  state.selectedTemplate = template || null;
   if (!template) return;
   setValue("#appName", template.default_app_name);
   setValue("#image", template.image);
@@ -212,6 +214,14 @@ async function handleDeploy(event) {
     env: parseEnvVars(document.querySelector("#envVars").value),
   };
 
+  if (state.selectedTemplate?.command) {
+    payload.command = state.selectedTemplate.command;
+  }
+
+  if (state.selectedTemplate?.args) {
+    payload.args = state.selectedTemplate.args;
+  }
+
   const ingressHost = document.querySelector("#ingressHost").value.trim();
   if (ingressHost) {
     payload.ingress_host = ingressHost;
@@ -231,6 +241,7 @@ async function handleDeploy(event) {
     document.querySelector("#cpuThreshold").value = 70;
     elements.templateSelect.value = "";
     elements.imageSelect.value = "";
+    state.selectedTemplate = null;
     await loadApps();
   } catch (error) {
     elements.deployMessage.textContent = error.message;

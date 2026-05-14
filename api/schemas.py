@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field, validator
 
@@ -49,6 +49,8 @@ class DeploymentCreateRequest(BaseModel):
     cpu_threshold: int = Field(default=70, ge=10, le=95)
     ingress_host: Optional[str] = Field(default=None, max_length=253)
     env: Dict[str, str] = Field(default_factory=dict)
+    command: Optional[List[str]] = None
+    args: Optional[List[str]] = None
 
     @validator("max_replicas")
     def max_gte_min(cls, value, values):
