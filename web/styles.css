@@ -154,7 +154,8 @@ label {
 }
 
 input,
-textarea {
+textarea,
+select {
   width: 100%;
   border: 1px solid var(--line);
   border-radius: 6px;
@@ -184,7 +185,8 @@ button:hover {
 
 button:disabled,
 input:disabled,
-textarea:disabled {
+textarea:disabled,
+select:disabled {
   cursor: not-allowed;
   opacity: 0.55;
 }

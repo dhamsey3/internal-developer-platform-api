@@ -1,6 +1,7 @@
 const state = {
   token: localStorage.getItem("cloudforge_token") || "",
   mode: "login",
+  catalog: { apps: [], images: [] },
 };
 
 const elements = {
@@ -14,6 +15,8 @@ const elements = {
   username: document.querySelector("#username"),
   password: document.querySelector("#password"),
   deployForm: document.querySelector("#deployForm"),
+  templateSelect: document.querySelector("#templateSelect"),
+  imageSelect: document.querySelector("#imageSelect"),
   deployMessage: document.querySelector("#deployMessage"),
   appsList: document.querySelector("#appsList"),
   refreshButton: document.querySelector("#refreshButton"),
@@ -56,10 +59,52 @@ function setSignedIn(signedIn) {
   elements.sessionStatus.textContent = signedIn ? "Signed in" : "Signed out";
   elements.logoutButton.disabled = !signedIn;
   elements.refreshButton.disabled = !signedIn;
-  elements.deployForm.querySelectorAll("input, textarea, button").forEach((field) => {
+  elements.deployForm.querySelectorAll("input, textarea, select, button").forEach((field) => {
     field.disabled = !signedIn;
   });
   elements.deployMessage.textContent = signedIn ? "" : "Sign in to deploy and manage apps.";
+}
+
+function setValue(selector, value) {
+  document.querySelector(selector).value = value;
+}
+
+function renderCatalog(catalog) {
+  state.catalog = catalog;
+  elements.templateSelect.innerHTML = [
+    '<option value="">Custom app</option>',
+    ...catalog.apps.map((app) => `<option value="${app.id}">${app.name}</option>`),
+  ].join("");
+
+  elements.imageSelect.innerHTML = [
+    '<option value="">Custom image</option>',
+    ...catalog.images.map((image) => `<option value="${image.image}">${image.label}</option>`),
+  ].join("");
+}
+
+async function loadCatalog() {
+  const catalog = await api("/catalog", { headers: {} });
+  renderCatalog(catalog);
+}
+
+function applyTemplate(templateId) {
+  const template = state.catalog.apps.find((app) => app.id === templateId);
+  if (!template) return;
+  setValue("#appName", template.default_app_name);
+  setValue("#image", template.image);
+  setValue("#imageSelect", template.image);
+  setValue("#port", template.port);
+  setValue("#replicas", template.replicas);
+  setValue("#minReplicas", template.min_replicas);
+  setValue("#maxReplicas", template.max_replicas);
+  setValue("#cpuThreshold", template.cpu_threshold);
+}
+
+function applyImage(imageRef) {
+  const image = state.catalog.images.find((item) => item.image === imageRef);
+  if (!image) return;
+  setValue("#image", image.image);
+  setValue("#port", image.port);
 }
 
 function parseEnvVars(value) {
@@ -184,6 +229,8 @@ async function handleDeploy(event) {
     document.querySelector("#minReplicas").value = 1;
     document.querySelector("#maxReplicas").value = 5;
     document.querySelector("#cpuThreshold").value = 70;
+    elements.templateSelect.value = "";
+    elements.imageSelect.value = "";
     await loadApps();
   } catch (error) {
     elements.deployMessage.textContent = error.message;
@@ -221,6 +268,8 @@ elements.loginTab.addEventListener("click", () => setMode("login"));
 elements.registerTab.addEventListener("click", () => setMode("register"));
 elements.authForm.addEventListener("submit", handleAuth);
 elements.deployForm.addEventListener("submit", handleDeploy);
+elements.templateSelect.addEventListener("change", (event) => applyTemplate(event.target.value));
+elements.imageSelect.addEventListener("change", (event) => applyImage(event.target.value));
 elements.refreshButton.addEventListener("click", loadApps);
 elements.appsList.addEventListener("click", handleAppAction);
 elements.logoutButton.addEventListener("click", () => {
@@ -231,6 +280,7 @@ elements.logoutButton.addEventListener("click", () => {
 });
 
 setSignedIn(Boolean(state.token));
+loadCatalog().catch(() => {});
 loadReadiness().catch(() => {});
 loadApps().catch((error) => {
   elements.appsList.innerHTML = `<p class="meta">${error.message}</p>`;

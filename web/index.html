@@ -49,6 +49,18 @@
         </div>
         <form id="deployForm" class="form grid-form">
           <label>
+            App template
+            <select id="templateSelect">
+              <option value="">Custom app</option>
+            </select>
+          </label>
+          <label>
+            Image catalog
+            <select id="imageSelect">
+              <option value="">Custom image</option>
+            </select>
+          </label>
+          <label>
             App name
             <input id="appName" required minlength="3" pattern="[a-z0-9]([-a-z0-9]*[a-z0-9])?" placeholder="orders-api" />
           </label>

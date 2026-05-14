@@ -1,7 +1,7 @@
 from fastapi import Depends, FastAPI
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
-from api.routes import auth, infrastructure, deployments, kubernetes, monitoring
+from api.routes import auth, catalog, deployments, infrastructure, kubernetes, monitoring
 from auth.rate_limit import rate_limiter
 from app.config import settings
 from app.logger import setup_logging
@@ -38,6 +38,7 @@ app.include_router(
     tags=["deployments"],
     dependencies=[Depends(rate_limiter)],
 )
+app.include_router(catalog.router, prefix="/catalog", tags=["catalog"], dependencies=[Depends(rate_limiter)])
 app.include_router(kubernetes.router, prefix="/kubernetes", tags=["kubernetes"], dependencies=[Depends(rate_limiter)])
 app.include_router(monitoring.router, prefix="/monitoring", tags=["monitoring"], dependencies=[Depends(rate_limiter)])
 app.include_router(kubernetes.router, tags=["kubernetes"], dependencies=[Depends(rate_limiter)])

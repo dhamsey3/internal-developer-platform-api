@@ -100,6 +100,7 @@ http://127.0.0.1:8000/dashboard/
 ```
 
 The dashboard lets developers register/login, deploy Docker images, see app status, delete deployments, and fetch pod logs.
+It also includes app-template and image-catalog dropdowns so developers can start from known defaults and still override the generated values.
 
 Register and log in:
 
