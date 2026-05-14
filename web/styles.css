@@ -182,6 +182,13 @@ button:hover {
   background: var(--primary-dark);
 }
 
+button:disabled,
+input:disabled,
+textarea:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 button.ghost {
   background: #ffffff;
   color: var(--primary-dark);

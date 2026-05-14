@@ -55,6 +55,11 @@ function setMode(mode) {
 function setSignedIn(signedIn) {
   elements.sessionStatus.textContent = signedIn ? "Signed in" : "Signed out";
   elements.logoutButton.disabled = !signedIn;
+  elements.refreshButton.disabled = !signedIn;
+  elements.deployForm.querySelectorAll("input, textarea, button").forEach((field) => {
+    field.disabled = !signedIn;
+  });
+  elements.deployMessage.textContent = signedIn ? "" : "Sign in to deploy and manage apps.";
 }
 
 function parseEnvVars(value) {
