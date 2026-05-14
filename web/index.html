@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CloudForge Developer Dashboard</title>
+    <link rel="stylesheet" href="/dashboard/styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">Internal Developer Platform</p>
+        <h1>CloudForge Dashboard</h1>
+      </div>
+      <div class="session">
+        <span id="sessionStatus">Signed out</span>
+        <button id="logoutButton" class="ghost" type="button">Sign out</button>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section class="panel auth-panel">
+        <div class="panel-heading">
+          <h2>Access</h2>
+          <span class="pill">JWT</span>
+        </div>
+        <div class="tabs" role="tablist">
+          <button id="loginTab" class="tab active" type="button">Login</button>
+          <button id="registerTab" class="tab" type="button">Register</button>
+        </div>
+        <form id="authForm" class="form">
+          <label>
+            Username
+            <input id="username" name="username" autocomplete="username" required minlength="3" />
+          </label>
+          <label>
+            Password
+            <input id="password" name="password" type="password" autocomplete="current-password" required minlength="8" />
+          </label>
+          <button id="authSubmit" type="submit">Login</button>
+        </form>
+        <p id="authMessage" class="message"></p>
+      </section>
+
+      <section class="panel deploy-panel">
+        <div class="panel-heading">
+          <h2>Create App</h2>
+          <span id="modePill" class="pill">dry-run</span>
+        </div>
+        <form id="deployForm" class="form grid-form">
+          <label>
+            App template
+            <select id="templateSelect">
+              <option value="">Custom app</option>
+            </select>
+          </label>
+          <label>
+            Image catalog
+            <select id="imageSelect">
+              <option value="">Custom image</option>
+            </select>
+          </label>
+          <label>
+            App name
+            <input id="appName" required minlength="3" pattern="[a-z0-9]([-a-z0-9]*[a-z0-9])?" placeholder="orders-api" />
+          </label>
+          <label>
+            Docker image
+            <input id="image" required placeholder="nginx:1.25" />
+          </label>
+          <label>
+            Port
+            <input id="port" type="number" min="1" max="65535" value="80" required />
+          </label>
+          <label>
+            Replicas
+            <input id="replicas" type="number" min="1" max="20" value="2" required />
+          </label>
+          <label>
+            Min replicas
+            <input id="minReplicas" type="number" min="1" max="20" value="1" required />
+          </label>
+          <label>
+            Max replicas
+            <input id="maxReplicas" type="number" min="1" max="100" value="5" required />
+          </label>
+          <label>
+            CPU threshold
+            <input id="cpuThreshold" type="number" min="10" max="95" value="70" required />
+          </label>
+          <label>
+            Ingress host
+            <input id="ingressHost" placeholder="optional" />
+          </label>
+          <label class="wide">
+            Environment variables
+            <textarea id="envVars" rows="4" placeholder="DATABASE_URL=postgres://...&#10;REDIS_URL=redis://..."></textarea>
+          </label>
+          <button type="submit">Deploy Image</button>
+        </form>
+        <p id="deployMessage" class="message"></p>
+      </section>
+
+      <section class="panel apps-panel">
+        <div class="panel-heading">
+          <h2>Apps</h2>
+          <button id="refreshButton" class="ghost" type="button">Refresh</button>
+        </div>
+        <div id="appsList" class="apps-list"></div>
+      </section>
+
+      <section class="panel logs-panel">
+        <div class="panel-heading">
+          <h2>Logs</h2>
+          <span id="logsTarget" class="pill">select app</span>
+        </div>
+        <pre id="logsOutput">Choose an app and click Logs.</pre>
+      </section>
+    </main>
+
+    <script src="/dashboard/app.js"></script>
+  </body>
+</html>

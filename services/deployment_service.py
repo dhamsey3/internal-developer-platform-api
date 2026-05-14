@@ -65,6 +65,8 @@ def create_deployment(
     port: int = 80,
     replicas: int = 1,
     secret_name: Optional[str] = None,
+    command: Optional[list[str]] = None,
+    args: Optional[list[str]] = None,
 ):
     if settings.KUBERNETES_DRY_RUN:
         logger.info("Dry run: deployment %s/%s with image %s would be created", namespace, name, image)
@@ -78,6 +80,8 @@ def create_deployment(
             env_from=[
                 client.V1EnvFromSource(secret_ref=client.V1SecretEnvSource(name=secret_name))
             ] if secret_name else None,
+            command=command,
+            args=args,
         )
         template = client.V1PodTemplateSpec(
             metadata=client.V1ObjectMeta(labels={"app": name}),
@@ -154,7 +158,11 @@ def provision_application(db: Session, user: User, request: DeploymentCreateRequ
         ingress_host=ingress_host,
         url=f"https://{ingress_host}",
         status="provisioning",
-        metadata_json={"env_keys": sorted(request.env.keys())},
+        metadata_json={
+            "env_keys": sorted(request.env.keys()),
+            "command": request.command,
+            "args": request.args,
+        },
     )
     db.add(deployment)
     db.commit()
@@ -171,6 +179,8 @@ def provision_application(db: Session, user: User, request: DeploymentCreateRequ
                 request.port,
                 request.replicas,
                 secret_name=f"{request.name}-env" if request.env else None,
+                command=request.command,
+                args=request.args,
             ),
             expose_service(namespace, request.name, 80, request.port),
             create_ingress(namespace, request.name, request.name, 80, ingress_host),

@@ -13,6 +13,20 @@ from services.deployment_service import (
 
 router = APIRouter()
 
+
+@router.get("", response_model=list[DeploymentResponse])
+def list_deployments(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return (
+        db.query(Deployment)
+        .filter(Deployment.owner_id == current_user.id)
+        .order_by(Deployment.created_at.desc())
+        .all()
+    )
+
+
 @router.post("", response_model=DeploymentResponse, status_code=201)
 def create_deployment_route(
     request: DeploymentCreateRequest,
