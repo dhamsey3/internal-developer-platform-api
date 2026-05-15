@@ -1,32 +1,30 @@
+{{- if .Values.worker.enabled }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "idp-api.fullname" . }}
+  name: {{ include "idp-api.fullname" . }}-worker
   labels:
-    app: {{ include "idp-api.name" . }}
+    app: {{ include "idp-api.name" . }}-worker
 spec:
-  {{- if not .Values.autoscaling.enabled }}
-  replicas: {{ .Values.replicaCount }}
-  {{- end }}
+  replicas: {{ .Values.worker.replicaCount }}
   selector:
     matchLabels:
-      app: {{ include "idp-api.name" . }}
+      app: {{ include "idp-api.name" . }}-worker
   template:
     metadata:
       labels:
-        app: {{ include "idp-api.name" . }}
+        app: {{ include "idp-api.name" . }}-worker
     spec:
       serviceAccountName: {{ include "idp-api.fullname" . }}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
-        - name: idp-api
+        - name: terraform-worker
           image: "{{ .Values.image.repository }}:{{ required "image.tag is required; pin an immutable release tag or digest" .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["python", "-m", "services.infra_worker"]
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
-          ports:
-            - containerPort: 8000
           volumeMounts:
             - name: tmp
               mountPath: /tmp
@@ -35,20 +33,9 @@ spec:
                 name: {{ include "idp-api.fullname" . }}-config
             - secretRef:
                 name: {{ include "idp-api.fullname" . }}-secrets
-          livenessProbe:
-            httpGet:
-              path: /healthz
-              port: 8000
-            initialDelaySeconds: 10
-            periodSeconds: 10
-          readinessProbe:
-            httpGet:
-              path: /readyz
-              port: 8000
-            initialDelaySeconds: 5
-            periodSeconds: 5
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
       volumes:
         - name: tmp
           emptyDir: {}
+{{- end }}

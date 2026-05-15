@@ -6,9 +6,9 @@ APP_TEMPLATES = [
     {
         "id": "nginx-web",
         "name": "Nginx web app",
-        "description": "Official nginx image that serves a default HTTP page on port 80.",
+        "description": "Official nginx image pinned to a stable tag for a tiny static web app.",
         "default_app_name": "nginx-web",
-        "image": "nginx:1.25",
+        "image": "nginx:1.25-alpine",
         "port": 80,
         "replicas": 2,
         "min_replicas": 1,
@@ -30,7 +30,7 @@ APP_TEMPLATES = [
     {
         "id": "whoami-api",
         "name": "Whoami API",
-        "description": "Tiny HTTP app that returns request and container details.",
+        "description": "Tiny HTTP app that returns request metadata; useful for smoke tests.",
         "default_app_name": "whoami-api",
         "image": "traefik/whoami:v1.10",
         "port": 80,
@@ -51,13 +51,26 @@ APP_TEMPLATES = [
         "max_replicas": 5,
         "cpu_threshold": 70,
     },
+    {
+        "id": "echo-server",
+        "name": "Echo server",
+        "description": "Small request/response test service for ingress and header debugging.",
+        "default_app_name": "echo-server",
+        "image": "ealen/echo-server:0.9.2",
+        "port": 80,
+        "replicas": 2,
+        "min_replicas": 1,
+        "max_replicas": 5,
+        "cpu_threshold": 70,
+    },
 ]
 
 IMAGE_CATALOG = [
-    {"label": "nginx 1.25", "image": "nginx:1.25", "port": 80},
+    {"label": "nginx 1.25 alpine", "image": "nginx:1.25-alpine", "port": 80},
     {"label": "httpd 2.4", "image": "httpd:2.4", "port": 80},
     {"label": "traefik whoami", "image": "traefik/whoami:v1.10", "port": 80},
     {"label": "nginx hello demo", "image": "nginxdemos/hello:plain-text", "port": 80},
+    {"label": "echo server", "image": "ealen/echo-server:0.9.2", "port": 80},
 ]
 
 

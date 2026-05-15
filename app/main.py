@@ -1,10 +1,12 @@
 from fastapi import Depends, FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from api.routes import auth, catalog, deployments, infrastructure, kubernetes, monitoring
 from auth.rate_limit import rate_limiter
 from app.config import settings
 from app.logger import setup_logging
+from app.security import SecurityHeadersMiddleware
 from database.session import init_db
 
 setup_logging()
@@ -17,6 +19,16 @@ app = FastAPI(
         "Internal Developer Platform API for infrastructure provisioning "
         "and Kubernetes application deployment."
     ),
+    debug=settings.DEBUG,
+)
+
+app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.allowed_origins_list,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "DELETE"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 

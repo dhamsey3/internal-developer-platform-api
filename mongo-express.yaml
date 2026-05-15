@@ -16,7 +16,12 @@ spec:
     spec:
       containers:
       - name: mongo-express
-        image: mongo-express
+        image: mongo-express:1.0.2-20
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
         ports:
         - containerPort: 8081
         env:

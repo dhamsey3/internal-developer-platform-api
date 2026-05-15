@@ -1,13 +1,18 @@
 replicaCount: 2
 image:
   repository: your-docker-repo/idp-api
-  tag: latest
+  tag: ""
   pullPolicy: IfNotPresent
 service:
   type: ClusterIP
   port: 8000
 config:
   environment: production
+  appDebug: "false"
+  allowedOrigins: "https://idp.local"
+  enablePublicRegistration: "false"
+  terraformJobBackend: "redis"
+  terraformJobQueueName: "terraform-jobs"
   awsRegion: us-east-1
   defaultIngressDomain: apps.example.com
   kubernetesDryRun: "false"
@@ -15,6 +20,7 @@ config:
 secrets:
   databaseUrl: ""
   redisUrl: "redis://redis-master:6379/0"
+  terraformJobRedisUrl: "redis://redis-master:6379/1"
   secretKey: ""
 ingress:
   enabled: true
@@ -37,3 +43,17 @@ autoscaling:
   minReplicas: 2
   maxReplicas: 10
   targetCPUUtilizationPercentage: 70
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+worker:
+  enabled: true
+  replicaCount: 1
