@@ -4,6 +4,8 @@
 - [ ] Terraform S3 backend configured
 - [ ] AWS resources provisioned (VPC, EKS, IAM)
 - [ ] Terraform state bucket secured
+- [ ] Terraform worker deployed with `TERRAFORM_JOB_BACKEND=redis`
+- [ ] Redis job queue monitored and backed up according to environment needs
 
 ## Kubernetes
 - [ ] Ingress controller deployed (NGINX/ALB)
@@ -13,9 +15,15 @@
 - [ ] Secrets created and referenced
 - [ ] App deployed via Helm
 - [ ] HTTPS enforced at ingress
+- [ ] API image tag pinned to a release tag or digest
+- [ ] Pod and container security contexts enabled
 
 ## Application
 - [ ] All secrets from env/K8s Secrets
+- [ ] `SECRET_KEY` is a random value of at least 32 characters
+- [ ] `APP_DEBUG=false` in production
+- [ ] `ENABLE_PUBLIC_REGISTRATION=false` unless intentionally offering self-service signup
+- [ ] `ALLOWED_ORIGINS` restricted to trusted dashboard origins
 - [ ] JWT, RBAC, rate limiting enabled
 - [ ] Liveness/readiness probes configured
 - [ ] Structured logging enabled
@@ -35,6 +43,7 @@
 - [ ] HTTPS everywhere
 - [ ] RBAC and network policies
 - [ ] Non-root containers
+- [ ] Read-only root filesystem where supported
 - [ ] Regular secret rotation
 
 ## Advanced

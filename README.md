@@ -83,6 +83,7 @@ For local development without a Kubernetes cluster or Terraform credentials, kee
 KUBERNETES_DRY_RUN=true
 TERRAFORM_DRY_RUN=true
 DATABASE_URL=sqlite:///./idp.db
+ENABLE_PUBLIC_REGISTRATION=true
 ```
 
 Install dependencies and run the API:
@@ -133,13 +134,15 @@ curl -X POST http://localhost:8000/deployments \
 
 ## Terraform
 
-The infrastructure API renders [terraform/main.tf.j2](terraform/main.tf.j2) and can create or destroy AWS resources. It is dry-run by default. Before enabling real execution:
+The infrastructure API records requests, returns `202 Accepted`, and queues Terraform work for a worker that updates the infrastructure status. Local development can use the in-process `background` backend, while production should use the Redis-backed worker queue. It renders [terraform/main.tf.j2](terraform/main.tf.j2) and can create or destroy AWS resources. It is dry-run by default. Before enabling real execution:
 
 - Create an encrypted S3 backend bucket.
 - Create a DynamoDB lock table.
 - Replace `TERRAFORM_STATE_BUCKET` and `TERRAFORM_LOCK_TABLE`.
 - Use IAM roles with least privilege.
 - Review generated plans before production use.
+- For production, move the background job behind a durable queue or use Terraform Cloud, Atlantis, GitHub Actions, or Argo Workflows for plan approval and audit history.
+- Set `TERRAFORM_JOB_BACKEND=redis` and run the worker with `python -m services.infra_worker`.
 
 Example:
 
@@ -152,10 +155,15 @@ curl -X POST http://localhost:8000/infrastructure/create \
     "cloud_provider": "aws",
     "config": {
       "aws_region": "us-east-1",
-      "eks_role_arn": "arn:aws:iam::123456789012:role/EKSRole"
+      "eks_role_arn": "arn:aws:iam::123456789012:role/EKSClusterRole",
+      "node_role_arn": "arn:aws:iam::123456789012:role/EKSNodeRole",
+      "state_bucket": "company-terraform-state",
+      "lock_table": "company-terraform-locks"
     }
   }'
 ```
+
+The initial response will have a status such as `queued`; poll `GET /infrastructure/{id}` for `provisioning`, `ready`, or `failed`. The Helm chart deploys a Terraform worker when `worker.enabled=true`.
 
 ## Helm Deployment
 
@@ -173,6 +181,8 @@ helm upgrade --install idp-api helm/charts/idp-api \
   --set secrets.secretKey='replace-with-long-random-secret'
 ```
 
+The chart intentionally fails if `image.tag` is empty. Use a release tag or digest rather than `latest`.
+
 ## Security
 
 Implemented:
@@ -182,15 +192,19 @@ Implemented:
 - Protected infrastructure, deployment, Kubernetes, and monitoring APIs
 - Redis-backed rate limiting with local fallback
 - Non-root Docker container
+- Security headers and restricted CORS origin configuration
+- Production startup validation for weak/default `SECRET_KEY`
+- Helm defaults for public registration disabled, debug disabled, read-only root filesystem, and dropped Linux capabilities
 - Kubernetes RBAC and network-policy examples
 - No hardcoded production secret requirement in Helm
 
 Recommended before production:
 
 - Use AWS Secrets Manager, External Secrets Operator, or sealed-secrets.
+- Keep public registration disabled unless you add an invite/admin onboarding flow.
 - Replace SQLite with managed PostgreSQL.
 - Use Alembic migrations.
-- Run Terraform through a job queue or workflow engine rather than synchronous HTTP requests.
+- Run Terraform through the Redis worker queue, Terraform Cloud, Atlantis, GitHub Actions, or another workflow engine with audit history.
 - Enforce tenant-aware namespace ownership.
 - Add admission policies with Kyverno or OPA Gatekeeper.
 - Use image allowlists and vulnerability scanning.

@@ -1,43 +1,169 @@
-
 terraform {
+  required_version = ">= 1.6.0"
+
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+  }
+
   backend "s3" {
-    bucket = "{{ state_bucket }}"
-    key    = "idp/{{ cluster_name }}/terraform.tfstate"
-    region = "{{ aws_region }}"
-    encrypt = true
+    bucket         = "{{ state_bucket }}"
+    key            = "idp/{{ cluster_name }}/terraform.tfstate"
+    region         = "{{ aws_region }}"
+    encrypt        = true
     dynamodb_table = "{{ lock_table }}"
   }
 }
 
 provider "aws" {
   region = "{{ aws_region }}"
+
+  default_tags {
+    tags = {
+{% for key, value in tags.items() %}
+      "{{ key }}" = "{{ value }}"
+{% endfor %}
+    }
+  }
+}
+
+data "aws_availability_zones" "available" {
+  state = "available"
 }
 
 resource "aws_vpc" "main" {
-  cidr_block = "10.0.0.0/16"
+  cidr_block           = "{{ vpc_cidr }}"
+  enable_dns_hostnames = true
+  enable_dns_support   = true
+
+  tags = {
+    Name = "{{ cluster_name }}-vpc"
+  }
 }
 
-resource "aws_subnet" "main" {
-  vpc_id     = aws_vpc.main.id
-  cidr_block = "10.0.1.0/24"
+resource "aws_internet_gateway" "main" {
+  vpc_id = aws_vpc.main.id
+
+  tags = {
+    Name = "{{ cluster_name }}-igw"
+  }
+}
+
+resource "aws_subnet" "public" {
+  count                   = {{ public_subnet_cidrs | length }}
+  vpc_id                  = aws_vpc.main.id
+  cidr_block              = local.public_subnet_cidrs[count.index]
+  availability_zone       = data.aws_availability_zones.available.names[count.index]
+  map_public_ip_on_launch = true
+
+  tags = {
+    Name                                      = "{{ cluster_name }}-public-${count.index + 1}"
+    "kubernetes.io/role/elb"                 = "1"
+    "kubernetes.io/cluster/{{ cluster_name }}" = "shared"
+  }
+}
+
+resource "aws_subnet" "private" {
+  count             = {{ private_subnet_cidrs | length }}
+  vpc_id            = aws_vpc.main.id
+  cidr_block        = local.private_subnet_cidrs[count.index]
+  availability_zone = data.aws_availability_zones.available.names[count.index]
+
+  tags = {
+    Name                                        = "{{ cluster_name }}-private-${count.index + 1}"
+    "kubernetes.io/role/internal-elb"           = "1"
+    "kubernetes.io/cluster/{{ cluster_name }}" = "shared"
+  }
+}
+
+resource "aws_route_table" "public" {
+  vpc_id = aws_vpc.main.id
+
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.main.id
+  }
+
+  tags = {
+    Name = "{{ cluster_name }}-public"
+  }
+}
+
+resource "aws_route_table_association" "public" {
+  count          = length(aws_subnet.public)
+  subnet_id      = aws_subnet.public[count.index].id
+  route_table_id = aws_route_table.public.id
 }
 
 resource "aws_security_group" "main" {
   name_prefix = "{{ cluster_name }}-eks-"
-  vpc_id = aws_vpc.main.id
+  description = "EKS control plane security group for {{ cluster_name }}"
+  vpc_id      = aws_vpc.main.id
+
   egress {
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
+
+  tags = {
+    Name = "{{ cluster_name }}-eks-control-plane"
+  }
 }
 
 resource "aws_eks_cluster" "main" {
-  name     = "{{ cluster_name }}"
-  role_arn = "{{ eks_role_arn }}"
+  name                      = "{{ cluster_name }}"
+  role_arn                  = "{{ eks_role_arn }}"
+  version                   = "{{ cluster_version }}"
+  enabled_cluster_log_types = {{ enabled_cluster_log_types | tojson }}
+
   vpc_config {
-    subnet_ids = [aws_subnet.main.id]
-    security_group_ids = [aws_security_group.main.id]
+    subnet_ids              = concat(aws_subnet.public[*].id, aws_subnet.private[*].id)
+    security_group_ids      = [aws_security_group.main.id]
+    endpoint_public_access  = {{ endpoint_public_access | lower }}
+    endpoint_private_access = {{ endpoint_private_access | lower }}
   }
+
+  tags = {
+    Name = "{{ cluster_name }}"
+  }
+}
+
+resource "aws_eks_node_group" "main" {
+  cluster_name    = aws_eks_cluster.main.name
+  node_group_name = "{{ cluster_name }}-default"
+  node_role_arn   = "{{ node_role_arn }}"
+  subnet_ids      = aws_subnet.private[*].id
+  instance_types  = {{ node_instance_types | tojson }}
+
+  scaling_config {
+    desired_size = {{ node_desired_size }}
+    min_size     = {{ node_min_size }}
+    max_size     = {{ node_max_size }}
+  }
+
+  update_config {
+    max_unavailable = 1
+  }
+
+  tags = {
+    Name = "{{ cluster_name }}-default-node-group"
+  }
+}
+
+locals {
+  public_subnet_cidrs  = {{ public_subnet_cidrs | tojson }}
+  private_subnet_cidrs = {{ private_subnet_cidrs | tojson }}
+}
+
+output "cluster_name" {
+  value = aws_eks_cluster.main.name
+}
+
+output "cluster_endpoint" {
+  value     = aws_eks_cluster.main.endpoint
+  sensitive = true
 }

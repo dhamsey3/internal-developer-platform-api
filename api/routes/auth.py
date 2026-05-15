@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.orm import Session
+from app.config import settings
 from database.models import User
 from auth.jwt_utils import get_password_hash, verify_password, create_access_token
 from auth.rbac import get_current_user
@@ -10,6 +11,8 @@ router = APIRouter()
 
 @router.post("/register")
 def register(request: RegisterRequest, db: Session = Depends(get_db)):
+    if not settings.ENABLE_PUBLIC_REGISTRATION:
+        raise HTTPException(status_code=403, detail="Public registration is disabled")
     user = db.query(User).filter(User.username == request.username).first()
     if user:
         raise HTTPException(status_code=400, detail="Username already registered")

@@ -10,13 +10,13 @@ class TokenResponse(BaseModel):
 
 
 class RegisterRequest(BaseModel):
-    username: str = Field(..., min_length=3, max_length=64)
+    username: str = Field(..., min_length=3, max_length=64, regex=r"^[a-zA-Z0-9_.-]+$")
     password: str = Field(..., min_length=8, max_length=128)
 
 
 class LoginRequest(BaseModel):
-    username: str
-    password: str
+    username: str = Field(..., min_length=3, max_length=64)
+    password: str = Field(..., min_length=8, max_length=128)
 
 
 class InfrastructureCreateRequest(BaseModel):
@@ -92,16 +92,16 @@ class ServiceExposeRequest(BaseModel):
 
 
 class IngressRequest(BaseModel):
-    namespace: str
-    name: str
-    service_name: str
+    namespace: str = Field(..., min_length=3, max_length=63, regex=r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$")
+    name: str = Field(..., min_length=3, max_length=63, regex=r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$")
+    service_name: str = Field(..., min_length=3, max_length=63, regex=r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$")
     service_port: int = Field(..., ge=1, le=65535)
-    host: str
+    host: str = Field(..., min_length=3, max_length=253, regex=r"^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$")
 
 
 class AutoscalingRequest(BaseModel):
-    namespace: str = "default"
-    deployment: str
+    namespace: str = Field(default="default", min_length=3, max_length=63, regex=r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$")
+    deployment: str = Field(..., min_length=3, max_length=63, regex=r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$")
     min_replicas: int = Field(..., ge=1)
     max_replicas: int = Field(..., ge=1)
     cpu_threshold: int = Field(..., ge=10, le=95)

@@ -4,6 +4,11 @@ metadata:
   name: {{ include "idp-api.fullname" . }}-config
 data:
   ENVIRONMENT: {{ .Values.config.environment | quote }}
+  APP_DEBUG: {{ .Values.config.appDebug | quote }}
+  ALLOWED_ORIGINS: {{ .Values.config.allowedOrigins | quote }}
+  ENABLE_PUBLIC_REGISTRATION: {{ .Values.config.enablePublicRegistration | quote }}
+  TERRAFORM_JOB_BACKEND: {{ .Values.config.terraformJobBackend | quote }}
+  TERRAFORM_JOB_QUEUE_NAME: {{ .Values.config.terraformJobQueueName | quote }}
   AWS_REGION: {{ .Values.config.awsRegion | quote }}
   DEFAULT_INGRESS_DOMAIN: {{ .Values.config.defaultIngressDomain | quote }}
   KUBERNETES_DRY_RUN: {{ .Values.config.kubernetesDryRun | quote }}
