@@ -13,7 +13,6 @@ from services.infra_queue import decode_job
 VALID_CONFIG = {
     "aws_region": "us-east-1",
     "state_bucket": "company-terraform-state",
-    "lock_table": "company-terraform-locks",
     "public_access_cidrs": ["203.0.113.10/32"],
 }
 
@@ -32,7 +31,9 @@ def test_rendered_terraform_has_professional_eks_defaults():
     context = _build_context("platform-dev", VALID_CONFIG)
     rendered = render_terraform_config(context)
 
-    assert 'required_version = ">= 1.6.0"' in rendered
+    assert 'required_version = ">= 1.10.0, < 2.0.0"' in rendered
+    assert "use_lockfile   = true" in rendered
+    assert "dynamodb_table" not in rendered
     assert 'resource "aws_eks_node_group" "main"' in rendered
     assert "endpoint_public_access  = true" in rendered
     assert 'public_access_cidrs     = ["203.0.113.10/32"]' in rendered
@@ -43,12 +44,19 @@ def test_rendered_terraform_has_professional_eks_defaults():
     assert "aws_subnet.private" in rendered
     assert 'resource "aws_nat_gateway" "main"' in rendered
     assert 'resource "aws_route_table" "private"' in rendered
+    assert "desired_size = 1" in rendered
+    assert "max_size     = 2" in rendered
 
 
 def test_public_eks_endpoint_rejects_world_access():
     config = {**VALID_CONFIG, "public_access_cidrs": ["0.0.0.0/0"]}
     result = validate_infrastructure_config("platform-dev", "aws", config)
     assert "must not expose the EKS API" in result
+
+
+def test_cluster_name_rejects_shell_metacharacters():
+    result = validate_infrastructure_config("idp;whoami", "aws", VALID_CONFIG)
+    assert "valid EKS cluster name" in result
 
 
 def test_aws_preflight_checks_identity_and_backend(monkeypatch):

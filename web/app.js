@@ -17,10 +17,8 @@ const elements = {
   authMessage: document.querySelector("#authMessage"),
   username: document.querySelector("#username"),
   password: document.querySelector("#password"),
-  clusterForm: document.querySelector("#clusterForm"),
   clusterStatus: document.querySelector("#clusterStatus"),
   clusterMessage: document.querySelector("#clusterMessage"),
-  awsPreflightButton: document.querySelector("#awsPreflightButton"),
   monitoringRefreshButton: document.querySelector("#monitoringRefreshButton"),
   apiHealth: document.querySelector("#apiHealth"),
   clusterHealth: document.querySelector("#clusterHealth"),
@@ -86,13 +84,7 @@ function setSignedIn(signedIn) {
   elements.deployForm.querySelectorAll("input, textarea, select, button").forEach((field) => {
     field.disabled = !signedIn;
   });
-  elements.clusterForm.querySelectorAll("input, button").forEach((field) => {
-    field.disabled = !signedIn || state.currentUser?.role !== "admin";
-  });
   elements.deployMessage.textContent = signedIn ? "" : "Sign in to deploy and manage apps.";
-  if (signedIn && state.currentUser?.role !== "admin") {
-    elements.clusterMessage.textContent = "Administrator access is required to provision AWS infrastructure.";
-  }
 }
 
 function setValue(selector, value) {
@@ -224,18 +216,6 @@ async function loadInfrastructure() {
   renderInfrastructure(await api("/infrastructure"));
 }
 
-function clusterPayload() {
-  return {
-    name: document.querySelector("#clusterName").value.trim(),
-    cloud_provider: "aws",
-    config: {
-      aws_region: document.querySelector("#awsRegion").value.trim(),
-      public_access_cidrs: [document.querySelector("#publicAccessCidr").value.trim()],
-      single_nat_gateway: document.querySelector("#singleNatGateway").checked,
-    },
-  };
-}
-
 async function loadMonitoring() {
   const ready = await api("/readyz", { headers: {} });
   elements.apiHealth.textContent = ready.status;
@@ -250,39 +230,6 @@ async function loadMonitoring() {
   elements.monitoringMessage.textContent = cluster.mode === "dry-run"
     ? "No Kubernetes cluster is connected yet."
     : "";
-}
-
-async function handleAwsPreflight() {
-  if (!elements.clusterForm.reportValidity()) return;
-  elements.clusterMessage.textContent = "Validating AWS credentials and Terraform backend...";
-  try {
-    const result = await api("/infrastructure/preflight", {
-      method: "POST",
-      body: JSON.stringify(clusterPayload()),
-    });
-    elements.clusterMessage.textContent = result.ready
-      ? "AWS setup is ready for EKS provisioning."
-      : `AWS setup is incomplete: ${Object.entries(result.checks)
-          .filter(([, passed]) => !passed)
-          .map(([check]) => check.replaceAll("_", " "))
-          .join(", ")}.`;
-  } catch (error) {
-    elements.clusterMessage.textContent = error.message;
-  }
-}
-
-async function handleClusterProvision(event) {
-  event.preventDefault();
-  elements.clusterMessage.textContent = "Submitting EKS provisioning request...";
-  try {
-    const cluster = await api("/infrastructure/create", {
-      method: "POST",
-      body: JSON.stringify(clusterPayload()),
-    });
-    renderInfrastructure([cluster]);
-  } catch (error) {
-    elements.clusterMessage.textContent = error.message;
-  }
 }
 
 async function loadApps() {
@@ -405,8 +352,6 @@ async function handleAppAction(event) {
 elements.loginTab.addEventListener("click", () => setMode("login"));
 elements.registerTab.addEventListener("click", () => setMode("register"));
 elements.authForm.addEventListener("submit", handleAuth);
-elements.clusterForm.addEventListener("submit", handleClusterProvision);
-elements.awsPreflightButton.addEventListener("click", handleAwsPreflight);
 elements.monitoringRefreshButton.addEventListener("click", () => loadMonitoring().catch(() => {}));
 elements.deployForm.addEventListener("submit", handleDeploy);
 elements.templateSelect.addEventListener("change", (event) => applyTemplate(event.target.value));

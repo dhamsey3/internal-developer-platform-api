@@ -24,7 +24,6 @@ class Settings(BaseSettings):
     KUBERNETES_DRY_RUN: bool = Field(default=False, env="KUBERNETES_DRY_RUN")
     TERRAFORM_DRY_RUN: bool = Field(default=True, env="TERRAFORM_DRY_RUN")
     TERRAFORM_STATE_BUCKET: str = Field(default="replace-me-terraform-state", env="TERRAFORM_STATE_BUCKET")
-    TERRAFORM_LOCK_TABLE: str = Field(default="replace-me-terraform-locks", env="TERRAFORM_LOCK_TABLE")
     TERRAFORM_JOB_BACKEND: str = Field(default="background", env="TERRAFORM_JOB_BACKEND")
     TERRAFORM_JOB_REDIS_URL: str = Field(default="redis://localhost:6379/1", env="TERRAFORM_JOB_REDIS_URL")
     TERRAFORM_JOB_QUEUE_NAME: str = Field(default="terraform-jobs", env="TERRAFORM_JOB_QUEUE_NAME")

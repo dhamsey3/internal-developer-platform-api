@@ -13,6 +13,7 @@ from app.config import settings
 
 TERRAFORM_TEMPLATE = Path(__file__).resolve().parent.parent / "terraform" / "main.tf.j2"
 AWS_REGION_RE = re.compile(r"^[a-z]{2}-[a-z]+-\d$")
+EKS_CLUSTER_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$")
 DEFAULT_CLUSTER_VERSION = "1.34"
 DEFAULT_NODE_INSTANCE_TYPES = ["t3.medium"]
 DEFAULT_TAGS = {
@@ -79,7 +80,6 @@ def check_aws_prerequisites(name: str, config: dict[str, Any]) -> dict[str, Any]
         "aws_cli": shutil.which("aws") is not None,
         "identity": False,
         "state_bucket": False,
-        "lock_table": False,
     }
     if not checks["terraform"] or not checks["aws_cli"]:
         return {"ready": False, "checks": checks}
@@ -87,17 +87,6 @@ def check_aws_prerequisites(name: str, config: dict[str, Any]) -> dict[str, Any]
     commands = {
         "identity": ["aws", "sts", "get-caller-identity", "--output", "json"],
         "state_bucket": ["aws", "s3api", "head-bucket", "--bucket", context["state_bucket"]],
-        "lock_table": [
-            "aws",
-            "dynamodb",
-            "describe-table",
-            "--table-name",
-            context["lock_table"],
-            "--region",
-            context["aws_region"],
-            "--output",
-            "json",
-        ],
     }
     errors = {}
     for check, command in commands.items():
@@ -127,14 +116,16 @@ def _string_list(value: Any, field_name: str, default: list[str]) -> list[str]:
 
 
 def _build_context(name: str, config: dict[str, Any]) -> dict[str, Any]:
+    if not EKS_CLUSTER_NAME_RE.fullmatch(name):
+        raise ValueError("name must be a valid EKS cluster name with at most 100 characters")
+
     aws_region = config.get("aws_region", settings.AWS_REGION)
     if not AWS_REGION_RE.match(aws_region):
         raise ValueError("aws_region must look like a valid AWS region, for example us-east-1")
 
     state_bucket = config.get("state_bucket", settings.TERRAFORM_STATE_BUCKET)
-    lock_table = config.get("lock_table", settings.TERRAFORM_LOCK_TABLE)
-    if state_bucket == "replace-me-terraform-state" or lock_table == "replace-me-terraform-locks":
-        raise ValueError("Terraform backend state_bucket and lock_table must be configured")
+    if state_bucket == "replace-me-terraform-state":
+        raise ValueError("Terraform backend state_bucket must be configured")
 
     public_subnet_cidrs = _string_list(
         config.get("public_subnet_cidrs"),
@@ -150,8 +141,8 @@ def _build_context(name: str, config: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("EKS requires at least two public and two private subnet CIDRs")
 
     node_min_size = int(config.get("node_min_size", 1))
-    node_desired_size = int(config.get("node_desired_size", 2))
-    node_max_size = int(config.get("node_max_size", 4))
+    node_desired_size = int(config.get("node_desired_size", 1))
+    node_max_size = int(config.get("node_max_size", 2))
     if not node_min_size <= node_desired_size <= node_max_size:
         raise ValueError("node sizing must satisfy node_min_size <= node_desired_size <= node_max_size")
 
@@ -181,7 +172,6 @@ def _build_context(name: str, config: dict[str, Any]) -> dict[str, Any]:
         "cluster_name": name,
         "cluster_version": config.get("cluster_version", DEFAULT_CLUSTER_VERSION),
         "state_bucket": state_bucket,
-        "lock_table": lock_table,
         "vpc_cidr": _validate_cidr(config.get("vpc_cidr", "10.0.0.0/16"), "vpc_cidr"),
         "public_subnet_cidrs": [_validate_cidr(cidr, "public_subnet_cidrs") for cidr in public_subnet_cidrs],
         "private_subnet_cidrs": [_validate_cidr(cidr, "private_subnet_cidrs") for cidr in private_subnet_cidrs],

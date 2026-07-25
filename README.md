@@ -114,7 +114,7 @@ open http://127.0.0.1:8000/docs
   - AWS infrastructure via Terraform
   - EKS cluster provisioning
   - Async job queue for long-running tasks
-  - State management with S3 + DynamoDB
+  - State management with encrypted S3 state and native lock files
 
 - **Developer Dashboard**
   - Web UI for non-technical users
@@ -147,22 +147,37 @@ The API receives authenticated platform requests, validates input, stores metada
 
 ## AWS First Deployment
 
-The first supported infrastructure target is Amazon EKS. A real provisioning request creates a VPC, public and private subnets across at least two Availability Zones, NAT egress for private worker nodes, an EKS control plane, and a managed node group. Terraform state is stored in S3 with DynamoDB locking.
+The first supported infrastructure target is Amazon EKS. A real provisioning request creates a VPC, public and private subnets across at least two Availability Zones, NAT egress for private worker nodes, an EKS control plane, and a managed node group. Terraform state is stored in a versioned, encrypted S3 bucket using native S3 lock files.
 
-Before setting `TERRAFORM_DRY_RUN=false`:
+Keep `TERRAFORM_DRY_RUN=true` in the IDP application. AWS infrastructure is executed by the **AWS Infrastructure** GitHub Actions workflow so permanent AWS credentials are not stored on the VM.
 
-- Create the Terraform state S3 bucket and DynamoDB lock table.
-- Give the IDP an AWS identity that can create the declared networking, EKS, and IAM resources, including passing the EKS roles Terraform creates. Prefer an IAM role when the IDP runs on AWS; use short-lived credentials for development.
-- Set `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and optionally `AWS_SESSION_TOKEN` in the runtime environment when using credentials on the current VM.
-- Restrict `public_access_cidrs` to the IDP VM's public egress address, such as `203.0.113.10/32`. The API rejects `0.0.0.0/0`.
-- Keep `single_nat_gateway=true` for a lower-cost development cluster. Set it to `false` for one NAT gateway per Availability Zone in a highly available environment.
+### One-time AWS and GitHub setup
 
-Use **Validate AWS Setup** in the dashboard before provisioning. The admin-only preflight checks the Terraform and AWS CLIs, the active AWS identity, the S3 state bucket, and the DynamoDB lock table without creating infrastructure.
+1. Use a dedicated AWS sandbox account and configure an AWS Budget with email alerts.
+2. Create a private S3 state bucket with versioning, server-side encryption, and public access blocked.
+3. Add the GitHub OIDC provider `token.actions.githubusercontent.com` to AWS IAM.
+4. Create a least-privilege deployment role whose trust policy allows only these GitHub OIDC subjects:
+   `repo:dhamsey3/internal-developer-platform-api:ref:refs/heads/main` for plans and
+   `repo:dhamsey3/internal-developer-platform-api:environment:aws-sandbox` for approved execution.
+   Also require the audience `sts.amazonaws.com`.
+5. In the GitHub repository, create these Actions variables:
+   `AWS_REGION`, `TF_STATE_BUCKET`, and `AWS_DEPLOY_ROLE_ARN`.
+6. Create the GitHub environment `aws-sandbox`, add required reviewers, prevent administrators from bypassing approval, and limit deployment branches to `main`.
 
-After Terraform creates the cluster, the IDP runs `aws eks update-kubeconfig` so subsequent application deployment requests target the new EKS cluster.
-The VM deployment stores that kubeconfig in the persistent `idp-kubeconfig` Docker volume so releases do not disconnect the IDP from EKS.
+Do not add `AWS_ACCESS_KEY_ID` or `AWS_SECRET_ACCESS_KEY` to GitHub, `.env`, or the VM. GitHub exchanges its OIDC token for temporary role credentials on each job.
 
-> Amazon EKS and NAT gateways incur AWS charges. Review the Terraform request and AWS pricing before disabling dry-run mode.
+### First sandbox run
+
+1. Open **Actions > AWS Infrastructure > Run workflow**.
+2. Select `plan`, use cluster name `idp-sandbox`, and enter the public egress IP that will access the EKS API followed by `/32`.
+3. Review the plan summary and estimated AWS resources.
+4. Run it again with `apply`.
+5. Review the new plan, then approve the waiting `aws-sandbox` environment deployment.
+6. Validate the cluster, then use the `destroy` action when the sandbox is no longer needed.
+
+The sandbox defaults to one `t3.medium` worker, scales to at most two, and uses one NAT gateway. EKS control-plane, EC2, NAT gateway, IPv4, storage, and data-transfer charges can still apply. AWS Budgets provide alerts, not a hard spending limit.
+
+This phase provisions and destroys AWS infrastructure only. Application delivery to EKS remains disabled until the pipeline has a narrowly scoped Kubernetes deployment identity; the VM does not receive AWS credentials or an administrator kubeconfig.
 
 ---
 
@@ -307,13 +322,13 @@ The infrastructure API records requests, returns `202 Accepted`, and queues Terr
 
 ### Production Setup
 
-- Create an encrypted S3 backend bucket
-- Create a DynamoDB lock table
-- Replace `TERRAFORM_STATE_BUCKET` and `TERRAFORM_LOCK_TABLE` environment variables
-- Use IAM roles with least privilege
-- Review generated plans before production use
-- For production, move the background job behind a durable queue or use Terraform Cloud, Atlantis, GitHub Actions, or Argo Workflows for plan approval and audit history
-- Set `TERRAFORM_JOB_BACKEND=redis` and run the worker: `python -m services.infra_worker`
+- Use the GitHub OIDC workflow described above for sandbox AWS execution.
+- Keep the API Terraform executor in dry-run mode.
+- Store state in an encrypted, versioned S3 bucket with public access blocked.
+- Use a least-privilege IAM role with a permissions boundary and narrowly scoped `iam:PassRole`.
+- Require a protected GitHub environment approval before apply or destroy.
+- Use separate AWS accounts, state buckets, roles, and GitHub environments for sandbox and production.
+- Add policy checks, cost estimation, and a durable job/event integration before allowing the IDP UI to trigger this workflow.
 
 ### Example Infrastructure Request
 
@@ -459,7 +474,7 @@ The GitHub Actions workflow installs dependencies, runs linting and tests, build
 
 ### Issue: Terraform state lock error
 
-**Solution**: Ensure DynamoDB lock table exists and your IAM credentials have proper permissions.
+**Solution**: Confirm no other Terraform run is active. If a stale `.tflock` object remains after a failed run, inspect the active workflows and lock metadata before removing it from the S3 state bucket.
 
 ---
 

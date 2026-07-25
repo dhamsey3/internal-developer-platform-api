@@ -57,28 +57,13 @@
           <h2>AWS Cluster</h2>
           <span id="clusterStatus" class="pill">not provisioned</span>
         </div>
-        <form id="clusterForm" class="form grid-form">
-          <label>
-            Cluster name
-            <input id="clusterName" required minlength="3" maxlength="63" pattern="[a-z0-9]([-a-z0-9]*[a-z0-9])?" placeholder="platform-dev" />
-          </label>
-          <label>
-            AWS region
-            <input id="awsRegion" required value="us-east-1" pattern="[a-z]{2}-[a-z]+-[0-9]" />
-          </label>
-          <label class="wide">
-            IDP public egress CIDR
-            <input id="publicAccessCidr" required placeholder="203.0.113.10/32" pattern="([0-9]{1,3}\.){3}[0-9]{1,3}/[0-9]{1,2}" />
-          </label>
-          <label class="checkbox-label wide">
-            <input id="singleNatGateway" type="checkbox" checked />
-            Use one NAT gateway for this development cluster
-          </label>
-          <div class="wide form-actions">
-            <button id="awsPreflightButton" class="ghost" type="button">Validate AWS Setup</button>
-            <button type="submit">Provision EKS Cluster</button>
-          </div>
-        </form>
+        <p class="message">AWS changes use temporary credentials and require approval in GitHub Actions.</p>
+        <a
+          class="button-link"
+          href="https://github.com/dhamsey3/internal-developer-platform-api/actions/workflows/aws-infrastructure.yaml"
+          target="_blank"
+          rel="noopener noreferrer"
+        >Open AWS workflow</a>
         <p id="clusterMessage" class="message"></p>
       </section>
 

@@ -1,7 +1,10 @@
 # Production Readiness Checklist for IDP API
 
 ## Infrastructure
-- [ ] Terraform S3 backend configured
+- [ ] Terraform S3 backend is encrypted, versioned, and blocks public access
+- [ ] GitHub OIDC role trust is restricted to this repository and `main`
+- [ ] `aws-sandbox` environment requires reviewer approval
+- [ ] AWS Budget alerts are configured in the sandbox account
 - [ ] AWS resources provisioned (VPC, EKS, IAM)
 - [ ] EKS API public access restricted to approved `/32` or corporate CIDRs
 - [ ] Private subnet NAT strategy selected (`single_nat_gateway=false` for zonal high availability)

@@ -1,0 +1,157 @@
+name: AWS Infrastructure
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: Terraform action
+        required: true
+        type: choice
+        options:
+          - plan
+          - apply
+          - destroy
+      cluster_name:
+        description: EKS cluster name
+        required: true
+        default: idp-sandbox
+        type: string
+      public_access_cidr:
+        description: EKS API allowlist CIDR, normally your public IP followed by /32
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: aws-infrastructure-${{ inputs.cluster_name }}
+  cancel-in-progress: false
+
+env:
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "false"
+  TF_WORKING_DIR: terraform-runtime
+  AWS_REGION: ${{ vars.AWS_REGION }}
+  TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+
+jobs:
+  plan:
+    name: Terraform plan
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate repository configuration
+        env:
+          AWS_DEPLOY_ROLE_ARN: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+        run: |
+          test -n "$AWS_REGION" || { echo "::error::Repository variable AWS_REGION is required"; exit 1; }
+          test -n "$TF_STATE_BUCKET" || { echo "::error::Repository variable TF_STATE_BUCKET is required"; exit 1; }
+          test -n "$AWS_DEPLOY_ROLE_ARN" || { echo "::error::Repository variable AWS_DEPLOY_ROLE_ARN is required"; exit 1; }
+
+      - name: Configure temporary AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: idp-${{ github.run_id }}-plan
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~1.10"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install renderer dependencies
+        run: pip install "jinja2>=3.1,<4.0" "pydantic>=1.10,<2.0" "python-dotenv>=1.0,<2.0"
+
+      - name: Render Terraform
+        env:
+          CLUSTER_NAME: ${{ inputs.cluster_name }}
+          PUBLIC_ACCESS_CIDR: ${{ inputs.public_access_cidr }}
+        run: |
+          mkdir -p "$TF_WORKING_DIR"
+          python -m scripts.render_terraform \
+            --cluster-name "$CLUSTER_NAME" \
+            --aws-region "$AWS_REGION" \
+            --state-bucket "$TF_STATE_BUCKET" \
+            --public-access-cidr "$PUBLIC_ACCESS_CIDR" \
+            --output "$TF_WORKING_DIR/main.tf"
+
+      - name: Initialize and validate
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: |
+          terraform fmt -check
+          terraform init
+          terraform validate
+
+      - name: Create saved plan
+        env:
+          TERRAFORM_ACTION: ${{ inputs.action }}
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: |
+          if [ "$TERRAFORM_ACTION" = "destroy" ]; then
+            terraform plan -destroy -lock-timeout=5m -out=tfplan
+          else
+            terraform plan -lock-timeout=5m -out=tfplan
+          fi
+          terraform show -no-color tfplan > tfplan.txt
+
+      - name: Add plan to run summary
+        run: |
+          {
+            echo "## Terraform plan"
+            echo '```'
+            sed -n '1,500p' "$TF_WORKING_DIR/tfplan.txt"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload saved plan
+        if: inputs.action != 'plan'
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-plan-${{ github.run_id }}
+          path: |
+            ${{ env.TF_WORKING_DIR }}/main.tf
+            ${{ env.TF_WORKING_DIR }}/.terraform.lock.hcl
+            ${{ env.TF_WORKING_DIR }}/tfplan
+          retention-days: 1
+          if-no-files-found: error
+
+  apply:
+    name: Approved Terraform execution
+    needs: plan
+    if: inputs.action != 'plan' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: aws-sandbox
+    steps:
+      - name: Configure temporary AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: idp-${{ github.run_id }}-apply
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~1.10"
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: terraform-plan-${{ github.run_id }}
+          path: ${{ env.TF_WORKING_DIR }}
+
+      - name: Reinitialize backend
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform init
+
+      - name: Apply reviewed plan
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform apply -lock-timeout=5m -auto-approve tfplan
