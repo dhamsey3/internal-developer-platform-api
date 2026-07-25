@@ -46,11 +46,48 @@ jobs:
         if: github.ref == 'refs/heads/main'
         run: echo "Configure registry login and docker push here"
 
+  terraform-check:
+    name: Validate AWS Terraform
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      TERRAFORM_DRY_RUN: "true"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install renderer dependencies
+        run: pip install "jinja2>=3.1,<4.0" "pydantic>=1.10,<2.0" "python-dotenv>=1.0,<2.0"
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~1.10"
+
+      - name: Render sandbox configuration
+        run: |
+          mkdir -p terraform-runtime
+          python -m scripts.render_terraform \
+            --cluster-name idp-ci \
+            --aws-region eu-central-1 \
+            --state-bucket idp-ci-state \
+            --public-access-cidr 203.0.113.10/32 \
+            --output terraform-runtime/main.tf
+
+      - name: Format and validate
+        working-directory: terraform-runtime
+        run: |
+          terraform fmt -check
+          terraform init -backend=false
+          terraform validate
+
   deploy-vm:
     name: Deploy to Ubuntu VM
-    needs: build
+    needs: [build, terraform-check]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    runs-on: [self-hosted, linux]
+    runs-on: [self-hosted, linux, idp-vm]
     timeout-minutes: 30
     env:
       IMAGE_NAME: idp-api
@@ -108,3 +145,7 @@ jobs:
               "$PREVIOUS_IMAGE"
           fi
           exit 1
+
+      - name: Remove runtime environment file
+        if: always()
+        run: rm -f .env
