@@ -13,7 +13,7 @@ from app.config import settings
 TERRAFORM_TEMPLATE = Path(__file__).resolve().parent.parent / "terraform" / "main.tf.j2"
 AWS_REGION_RE = re.compile(r"^[a-z]{2}-[a-z]+-\d$")
 IAM_ROLE_ARN_RE = re.compile(r"^arn:aws:iam::\d{12}:role\/[A-Za-z0-9+=,.@_/-]+$")
-DEFAULT_CLUSTER_VERSION = "1.29"
+DEFAULT_CLUSTER_VERSION = "1.34"
 DEFAULT_NODE_INSTANCE_TYPES = ["t3.medium"]
 DEFAULT_TAGS = {
     "ManagedBy": "idp-api",
@@ -48,11 +48,37 @@ def run_terraform(directory: str, action: str = 'apply'):
     return True
 
 
-def _validate_cidr(value: str, field_name: str) -> str:
+def configure_eks_kubeconfig(cluster_name: str, aws_region: str) -> None:
+    if settings.TERRAFORM_DRY_RUN:
+        return
+    proc = subprocess.run(
+        [
+            "aws",
+            "eks",
+            "update-kubeconfig",
+            "--name",
+            cluster_name,
+            "--region",
+            aws_region,
+            "--alias",
+            cluster_name,
+        ],
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    if proc.returncode != 0:
+        stderr = proc.stderr.strip() or proc.stdout.strip()
+        raise RuntimeError(f"Failed to configure EKS kubeconfig: {stderr}")
+
+
+def _validate_cidr(value: str, field_name: str, *, require_ipv4: bool = True) -> str:
     try:
-        ipaddress.ip_network(value)
+        network = ipaddress.ip_network(value)
     except ValueError as exc:
         raise ValueError(f"{field_name} must be a valid CIDR block") from exc
+    if require_ipv4 and network.version != 4:
+        raise ValueError(f"{field_name} must be an IPv4 CIDR block")
     return value
 
 
@@ -100,9 +126,24 @@ def _build_context(name: str, config: dict[str, Any]) -> dict[str, Any]:
     if not node_min_size <= node_desired_size <= node_max_size:
         raise ValueError("node sizing must satisfy node_min_size <= node_desired_size <= node_max_size")
 
+    endpoint_public_access = bool(config.get("endpoint_public_access", True))
+    public_access_cidrs = _string_list(
+        config.get("public_access_cidrs"),
+        "public_access_cidrs",
+        [],
+    ) if endpoint_public_access else []
+    if endpoint_public_access and not public_access_cidrs:
+        raise ValueError("public_access_cidrs is required when endpoint_public_access is true")
+    validated_public_access_cidrs = [
+        _validate_cidr(cidr, "public_access_cidrs") for cidr in public_access_cidrs
+    ]
+    if "0.0.0.0/0" in validated_public_access_cidrs:
+        raise ValueError("public_access_cidrs must not expose the EKS API to 0.0.0.0/0")
+
     custom_tags = config.get("tags", {})
-    tags_are_strings = all(isinstance(k, str) and isinstance(v, str) for k, v in custom_tags.items())
-    if not isinstance(custom_tags, dict) or not tags_are_strings:
+    if not isinstance(custom_tags, dict):
+        raise ValueError("tags must be an object with string keys and values")
+    if not all(isinstance(k, str) and isinstance(v, str) for k, v in custom_tags.items()):
         raise ValueError("tags must be an object with string keys and values")
 
     tags = {**DEFAULT_TAGS, **custom_tags}
@@ -117,8 +158,10 @@ def _build_context(name: str, config: dict[str, Any]) -> dict[str, Any]:
         "vpc_cidr": _validate_cidr(config.get("vpc_cidr", "10.0.0.0/16"), "vpc_cidr"),
         "public_subnet_cidrs": [_validate_cidr(cidr, "public_subnet_cidrs") for cidr in public_subnet_cidrs],
         "private_subnet_cidrs": [_validate_cidr(cidr, "private_subnet_cidrs") for cidr in private_subnet_cidrs],
-        "endpoint_public_access": bool(config.get("endpoint_public_access", False)),
+        "endpoint_public_access": endpoint_public_access,
         "endpoint_private_access": bool(config.get("endpoint_private_access", True)),
+        "public_access_cidrs": validated_public_access_cidrs,
+        "single_nat_gateway": bool(config.get("single_nat_gateway", True)),
         "enabled_cluster_log_types": _string_list(
             config.get("enabled_cluster_log_types"),
             "enabled_cluster_log_types",
@@ -159,6 +202,7 @@ def provision_infrastructure(name: str, cloud_provider: str, config: dict):
             f.write(render_terraform_config(context))
         try:
             run_terraform(tmpdir, 'apply')
+            configure_eks_kubeconfig(context["cluster_name"], context["aws_region"])
             return True
         except Exception as e:
             return str(e)

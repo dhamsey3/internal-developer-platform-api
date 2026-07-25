@@ -1,13 +1,18 @@
+import shutil
+
 from fastapi import Depends, FastAPI
+from fastapi import HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 from api.routes import auth, catalog, deployments, infrastructure, kubernetes, monitoring
 from auth.rate_limit import rate_limiter
 from app.config import settings
 from app.logger import setup_logging
 from app.security import SecurityHeadersMiddleware
-from database.session import init_db
+from database.session import SessionLocal, init_db
 
 setup_logging()
 
@@ -63,11 +68,31 @@ def health_check():
 
 @app.get("/readyz")
 def readiness_check():
+    checks = {
+        "database": False,
+        "terraform": settings.TERRAFORM_DRY_RUN or shutil.which("terraform") is not None,
+        "aws_cli": settings.TERRAFORM_DRY_RUN or shutil.which("aws") is not None,
+    }
+    db = SessionLocal()
+    try:
+        db.execute(text("SELECT 1"))
+        checks["database"] = True
+    except SQLAlchemyError:
+        checks["database"] = False
+    finally:
+        db.close()
+
+    if not all(checks.values()):
+        raise HTTPException(
+            status_code=503,
+            detail={"status": "not_ready", "checks": checks},
+        )
     return {
         "status": "ready",
         "environment": settings.ENVIRONMENT,
         "kubernetes_dry_run": settings.KUBERNETES_DRY_RUN,
         "terraform_dry_run": settings.TERRAFORM_DRY_RUN,
+        "checks": checks,
     }
 
 

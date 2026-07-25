@@ -3,6 +3,9 @@
 ## Infrastructure
 - [ ] Terraform S3 backend configured
 - [ ] AWS resources provisioned (VPC, EKS, IAM)
+- [ ] EKS API public access restricted to approved `/32` or corporate CIDRs
+- [ ] Private subnet NAT strategy selected (`single_nat_gateway=false` for zonal high availability)
+- [ ] Supported EKS Kubernetes version selected
 - [ ] Terraform state bucket secured
 - [ ] Terraform worker deployed with `TERRAFORM_JOB_BACKEND=redis`
 - [ ] Redis job queue monitored and backed up according to environment needs

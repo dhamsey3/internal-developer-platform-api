@@ -7,7 +7,7 @@ DEFAULT_SECRET_KEY = "change-me-in-production"
 
 
 class Settings(BaseSettings):
-    PROJECT_NAME: str = "Cloud Infrastructure Provisioning API"
+    PROJECT_NAME: str = "Internal Developer Platform API"
     VERSION: str = "1.0.0"
     ENVIRONMENT: str = Field(default="local", env="ENVIRONMENT")
     DEBUG: bool = Field(default=True, env="APP_DEBUG")

@@ -13,6 +13,7 @@ VALID_CONFIG = {
     "node_role_arn": "arn:aws:iam::123456789012:role/EKSNodeRole",
     "state_bucket": "company-terraform-state",
     "lock_table": "company-terraform-locks",
+    "public_access_cidrs": ["203.0.113.10/32"],
 }
 
 
@@ -32,10 +33,19 @@ def test_rendered_terraform_has_professional_eks_defaults():
 
     assert 'required_version = ">= 1.6.0"' in rendered
     assert 'resource "aws_eks_node_group" "main"' in rendered
-    assert "endpoint_public_access  = false" in rendered
+    assert "endpoint_public_access  = true" in rendered
+    assert 'public_access_cidrs     = ["203.0.113.10/32"]' in rendered
     assert 'enabled_cluster_log_types = ["api", "audit", "authenticator"]' in rendered
     assert 'node_role_arn   = "arn:aws:iam::123456789012:role/EKSNodeRole"' in rendered
     assert "aws_subnet.private" in rendered
+    assert 'resource "aws_nat_gateway" "main"' in rendered
+    assert 'resource "aws_route_table" "private"' in rendered
+
+
+def test_public_eks_endpoint_rejects_world_access():
+    config = {**VALID_CONFIG, "public_access_cidrs": ["0.0.0.0/0"]}
+    result = validate_infrastructure_config("platform-dev", "aws", config)
+    assert "must not expose the EKS API" in result
 
 
 def test_decode_infrastructure_queue_job():

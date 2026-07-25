@@ -3,14 +3,14 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>CloudForge Developer Dashboard</title>
+    <title>Internal Developer Platform</title>
     <link rel="stylesheet" href="/dashboard/styles.css" />
   </head>
   <body>
     <header class="topbar">
       <div>
-        <p class="eyebrow">Internal Developer Platform</p>
-        <h1>CloudForge Dashboard</h1>
+        <p class="eyebrow">AWS-first platform engineering</p>
+        <h1>Internal Developer Platform</h1>
       </div>
       <div class="session">
         <span id="sessionStatus">Signed out</span>
@@ -31,7 +31,17 @@
         <form id="authForm" class="form">
           <label>
             Username
-            <input id="username" name="username" autocomplete="username" required minlength="3" />
+            <input
+              id="username"
+              name="username"
+              autocomplete="username"
+              required
+              minlength="3"
+              maxlength="64"
+              pattern="[A-Za-z0-9_.-]+"
+              title="Use letters, numbers, dots, underscores, or hyphens."
+              placeholder="platform-admin"
+            />
           </label>
           <label>
             Password

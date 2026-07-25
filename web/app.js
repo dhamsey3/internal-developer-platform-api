@@ -1,5 +1,5 @@
 const state = {
-  token: localStorage.getItem("cloudforge_token") || "",
+  token: localStorage.getItem("idp_token") || "",
   mode: "login",
   catalog: { apps: [], images: [] },
   selectedTemplate: null,
@@ -43,6 +43,15 @@ async function api(path, options = {}) {
   const payload = contentType.includes("application/json") ? await response.json() : await response.text();
   if (!response.ok) {
     const detail = payload.detail || payload || "Request failed";
+    if (Array.isArray(detail)) {
+      const message = detail
+        .map((item) => {
+          const field = Array.isArray(item.loc) ? item.loc[item.loc.length - 1] : "request";
+          return `${field}: ${item.msg}`;
+        })
+        .join(". ");
+      throw new Error(message);
+    }
     throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
   }
   return payload;
@@ -190,7 +199,7 @@ async function handleAuth(event) {
       body: JSON.stringify({ username, password }),
     });
     state.token = login.access_token;
-    localStorage.setItem("cloudforge_token", state.token);
+    localStorage.setItem("idp_token", state.token);
     setSignedIn(true);
     elements.authMessage.textContent = "Signed in.";
     await loadApps();
@@ -287,7 +296,7 @@ elements.refreshButton.addEventListener("click", loadApps);
 elements.appsList.addEventListener("click", handleAppAction);
 elements.logoutButton.addEventListener("click", () => {
   state.token = "";
-  localStorage.removeItem("cloudforge_token");
+  localStorage.removeItem("idp_token");
   setSignedIn(false);
   renderApps([]);
 });

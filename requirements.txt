@@ -12,5 +12,6 @@ httpx>=0.27,<1.0
 jinja2>=3.1,<4.0
 python-dotenv>=1.0,<2.0
 prometheus-client>=0.20,<1.0
+awscli>=1.33,<2.0
 pytest>=8.0,<9.0
 pytest-asyncio>=0.23,<1.0

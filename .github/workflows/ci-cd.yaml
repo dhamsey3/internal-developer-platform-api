@@ -6,9 +6,17 @@ on:
   pull_request:
     branches: [ main ]
 
+permissions:
+  contents: read
+
+concurrency:
+  group: idp-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     env:
       DATABASE_URL: sqlite:///./test-idp.db
       SECRET_KEY: ci-test-secret
@@ -43,6 +51,7 @@ jobs:
     needs: build
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: [self-hosted, linux]
+    timeout-minutes: 30
     env:
       IMAGE_NAME: idp-api
       CONTAINER_NAME: idp-api
@@ -63,6 +72,8 @@ jobs:
 
       - name: Deploy container
         run: |
+          previous_image=$(docker inspect --format '{{.Config.Image}}' $CONTAINER_NAME 2>/dev/null || true)
+          echo "PREVIOUS_IMAGE=$previous_image" >> "$GITHUB_ENV"
           docker stop $CONTAINER_NAME || true
           docker rm $CONTAINER_NAME || true
           docker run -d \
@@ -83,4 +94,15 @@ jobs:
             sleep 2
           done
           docker logs --tail 100 $CONTAINER_NAME
+          docker rm --force $CONTAINER_NAME
+          if [ -n "$PREVIOUS_IMAGE" ]; then
+            docker run -d \
+              --name $CONTAINER_NAME \
+              --restart unless-stopped \
+              --env-file .env \
+              --env DATABASE_URL=sqlite:////data/idp.db \
+              --volume idp-api-data:/data \
+              -p $APP_PORT:8000 \
+              "$PREVIOUS_IMAGE"
+          fi
           exit 1

@@ -18,6 +18,7 @@
 - [Prerequisites](#prerequisites)
 - [Features](#features)
 - [Architecture](#architecture)
+- [AWS First Deployment](#aws-first-deployment)
 - [Project Structure](#project-structure)
 - [API Endpoints](#api-endpoints)
 - [Local Development](#local-development)
@@ -35,7 +36,7 @@
 
 ## Overview
 
-The **Internal Developer Platform (IDP) API** is a FastAPI-based platform that enables self-service cloud infrastructure provisioning and application deployments. It abstracts the complexity of Kubernetes and Terraform, allowing developers to deploy containerized applications and provision AWS infrastructure through simple API calls or a web dashboard.
+The **Internal Developer Platform (IDP) API** is an AWS-first FastAPI platform for provisioning Amazon EKS infrastructure and deploying applications to Kubernetes. AWS is the only supported cloud provider today; additional providers can be added after the AWS workflow is proven.
 
 ## Live Deployment
 
@@ -144,6 +145,25 @@ The API receives authenticated platform requests, validates input, stores metada
 
 ---
 
+## AWS First Deployment
+
+The first supported infrastructure target is Amazon EKS. A real provisioning request creates a VPC, public and private subnets across at least two Availability Zones, NAT egress for private worker nodes, an EKS control plane, and a managed node group. Terraform state is stored in S3 with DynamoDB locking.
+
+Before setting `TERRAFORM_DRY_RUN=false`:
+
+- Create the Terraform state S3 bucket and DynamoDB lock table.
+- Create separate EKS cluster and managed-node IAM roles.
+- Give the IDP an AWS identity with only the permissions needed to manage the declared resources. Prefer an IAM role when the IDP runs on AWS; use short-lived credentials for development.
+- Set `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and optionally `AWS_SESSION_TOKEN` in the runtime environment when using credentials on the current VM.
+- Restrict `public_access_cidrs` to the IDP VM's public egress address, such as `203.0.113.10/32`. The API rejects `0.0.0.0/0`.
+- Keep `single_nat_gateway=true` for a lower-cost development cluster. Set it to `false` for one NAT gateway per Availability Zone in a highly available environment.
+
+After Terraform creates the cluster, the IDP runs `aws eks update-kubeconfig` so subsequent application deployment requests target the new EKS cluster.
+
+> Amazon EKS and NAT gateways incur AWS charges. Review the Terraform request and AWS pricing before disabling dry-run mode.
+
+---
+
 ## Project Structure
 
 ```text
@@ -157,7 +177,7 @@ kubernetes/       Cluster RBAC and network policy examples
 terraform/        AWS Terraform templates
 helm/             Helm chart for the API itself
 monitoring/       Prometheus and Grafana examples
-scripts/          Bootstrap, migration, production checklist helpers
+scripts/          Bootstrap and production checklist helpers
 tests/            Unit tests
 ```
 
@@ -307,7 +327,9 @@ curl -X POST http://localhost:8000/infrastructure/create \
       "eks_role_arn": "arn:aws:iam::123456789012:role/EKSClusterRole",
       "node_role_arn": "arn:aws:iam::123456789012:role/EKSNodeRole",
       "state_bucket": "company-terraform-state",
-      "lock_table": "company-terraform-locks"
+      "lock_table": "company-terraform-locks",
+      "public_access_cidrs": ["203.0.113.10/32"],
+      "single_nat_gateway": true
     }
   }'
 ```
@@ -388,7 +410,7 @@ The API exposes Prometheus metrics at `/monitoring/metrics`. Example scrape conf
 
 ## CI/CD
 
-The GitHub Actions workflow installs dependencies, runs linting/tests, and builds the Docker image. Registry push and Kubernetes deployment stages are intentionally left as placeholders until you configure your registry and cluster access.
+The GitHub Actions workflow installs dependencies, runs linting and tests, builds the Docker image, and deploys the API to the Ubuntu self-hosted runner. The VM deployment uses a persistent Docker volume for SQLite data and verifies `/healthz` after each release.
 
 ---
 

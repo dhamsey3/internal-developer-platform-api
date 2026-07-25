@@ -1,0 +1,14 @@
+.git
+.github
+.env
+.venv
+__pycache__
+*.py[cod]
+*.db
+.pytest_cache
+README.md
+tests
+helm
+monitoring
+scripts
+kubernetes
