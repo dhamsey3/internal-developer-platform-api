@@ -152,8 +152,7 @@ The first supported infrastructure target is Amazon EKS. A real provisioning req
 Before setting `TERRAFORM_DRY_RUN=false`:
 
 - Create the Terraform state S3 bucket and DynamoDB lock table.
-- Create separate EKS cluster and managed-node IAM roles.
-- Give the IDP an AWS identity with only the permissions needed to manage the declared resources. Prefer an IAM role when the IDP runs on AWS; use short-lived credentials for development.
+- Give the IDP an AWS identity that can create the declared networking, EKS, and IAM resources, including passing the EKS roles Terraform creates. Prefer an IAM role when the IDP runs on AWS; use short-lived credentials for development.
 - Set `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and optionally `AWS_SESSION_TOKEN` in the runtime environment when using credentials on the current VM.
 - Restrict `public_access_cidrs` to the IDP VM's public egress address, such as `203.0.113.10/32`. The API rejects `0.0.0.0/0`.
 - Keep `single_nat_gateway=true` for a lower-cost development cluster. Set it to `false` for one NAT gateway per Availability Zone in a highly available environment.
@@ -327,10 +326,6 @@ curl -X POST http://localhost:8000/infrastructure/create \
     "cloud_provider": "aws",
     "config": {
       "aws_region": "us-east-1",
-      "eks_role_arn": "arn:aws:iam::123456789012:role/EKSClusterRole",
-      "node_role_arn": "arn:aws:iam::123456789012:role/EKSNodeRole",
-      "state_bucket": "company-terraform-state",
-      "lock_table": "company-terraform-locks",
       "public_access_cidrs": ["203.0.113.10/32"],
       "single_nat_gateway": true
     }

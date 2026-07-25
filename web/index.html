@@ -67,22 +67,6 @@
             <input id="awsRegion" required value="us-east-1" pattern="[a-z]{2}-[a-z]+-[0-9]" />
           </label>
           <label class="wide">
-            EKS cluster role ARN
-            <input id="eksRoleArn" required placeholder="arn:aws:iam::123456789012:role/EKSClusterRole" />
-          </label>
-          <label class="wide">
-            EKS node role ARN
-            <input id="nodeRoleArn" required placeholder="arn:aws:iam::123456789012:role/EKSNodeRole" />
-          </label>
-          <label>
-            Terraform state bucket
-            <input id="stateBucket" required placeholder="company-terraform-state" />
-          </label>
-          <label>
-            DynamoDB lock table
-            <input id="lockTable" required placeholder="company-terraform-locks" />
-          </label>
-          <label class="wide">
             IDP public egress CIDR
             <input id="publicAccessCidr" required placeholder="203.0.113.10/32" pattern="([0-9]{1,3}\.){3}[0-9]{1,3}/[0-9]{1,2}" />
           </label>
@@ -155,6 +139,32 @@
           <button type="submit">Deploy Image</button>
         </form>
         <p id="deployMessage" class="message"></p>
+      </section>
+
+      <section class="panel monitoring-panel">
+        <div class="panel-heading">
+          <h2>Monitoring</h2>
+          <button id="monitoringRefreshButton" class="ghost" type="button">Refresh</button>
+        </div>
+        <div class="monitoring-grid">
+          <div class="monitor-item">
+            <span class="meta">IDP API</span>
+            <strong id="apiHealth">checking</strong>
+          </div>
+          <div class="monitor-item">
+            <span class="meta">Kubernetes</span>
+            <strong id="clusterHealth">checking</strong>
+          </div>
+          <div class="monitor-item">
+            <span class="meta">Ready nodes</span>
+            <strong id="nodeHealth">0 / 0</strong>
+          </div>
+          <div class="monitor-item">
+            <span class="meta">Applications</span>
+            <strong id="applicationHealth">0 running</strong>
+          </div>
+        </div>
+        <p id="monitoringMessage" class="message"></p>
       </section>
 
       <section class="panel apps-panel">

@@ -92,6 +92,29 @@ h2 {
   grid-column: 1 / -1;
 }
 
+.monitoring-panel {
+  grid-column: 1 / -1;
+}
+
+.monitoring-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.monitor-item {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 14px;
+  border-right: 1px solid var(--line);
+}
+
+.monitor-item:last-child {
+  border-right: 0;
+}
+
 .logs-panel {
   grid-column: 1 / -1;
 }
@@ -277,6 +300,12 @@ button.danger {
   color: var(--warn);
 }
 
+.status-degraded,
+.status-not_configured {
+  background: #fffaeb;
+  color: var(--warn);
+}
+
 pre {
   min-height: 220px;
   max-height: 440px;
@@ -300,8 +329,18 @@ pre {
 
   .topbar,
   .layout,
-  .grid-form {
+  .grid-form,
+  .monitoring-grid {
     grid-template-columns: 1fr;
+  }
+
+  .monitor-item {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .monitor-item:last-child {
+    border-bottom: 0;
   }
 
   .topbar {

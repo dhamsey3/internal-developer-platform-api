@@ -12,22 +12,20 @@ from services.infra_queue import decode_job
 
 VALID_CONFIG = {
     "aws_region": "us-east-1",
-    "eks_role_arn": "arn:aws:iam::123456789012:role/EKSClusterRole",
-    "node_role_arn": "arn:aws:iam::123456789012:role/EKSNodeRole",
     "state_bucket": "company-terraform-state",
     "lock_table": "company-terraform-locks",
     "public_access_cidrs": ["203.0.113.10/32"],
 }
 
 
-def test_infra_requires_real_backend_and_role():
+def test_infra_requires_real_backend():
     result = provision_infrastructure("platform-dev", "aws", {"aws_region": "us-east-1"})
-    assert "eks_role_arn is required" in result
+    assert "Terraform backend" in result
 
 
 def test_infra_validation_catches_bad_requests_before_queueing():
     result = validate_infrastructure_config("platform-dev", "aws", {"aws_region": "us-east-1"})
-    assert "eks_role_arn is required" in result
+    assert "Terraform backend" in result
 
 
 def test_rendered_terraform_has_professional_eks_defaults():
@@ -39,7 +37,9 @@ def test_rendered_terraform_has_professional_eks_defaults():
     assert "endpoint_public_access  = true" in rendered
     assert 'public_access_cidrs     = ["203.0.113.10/32"]' in rendered
     assert 'enabled_cluster_log_types = ["api", "audit", "authenticator"]' in rendered
-    assert 'node_role_arn   = "arn:aws:iam::123456789012:role/EKSNodeRole"' in rendered
+    assert "node_role_arn   = aws_iam_role.eks_node.arn" in rendered
+    assert 'resource "aws_iam_role" "eks_cluster"' in rendered
+    assert 'resource "aws_iam_role" "eks_node"' in rendered
     assert "aws_subnet.private" in rendered
     assert 'resource "aws_nat_gateway" "main"' in rendered
     assert 'resource "aws_route_table" "private"' in rendered

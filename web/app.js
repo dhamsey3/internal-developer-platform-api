@@ -21,6 +21,12 @@ const elements = {
   clusterStatus: document.querySelector("#clusterStatus"),
   clusterMessage: document.querySelector("#clusterMessage"),
   awsPreflightButton: document.querySelector("#awsPreflightButton"),
+  monitoringRefreshButton: document.querySelector("#monitoringRefreshButton"),
+  apiHealth: document.querySelector("#apiHealth"),
+  clusterHealth: document.querySelector("#clusterHealth"),
+  nodeHealth: document.querySelector("#nodeHealth"),
+  applicationHealth: document.querySelector("#applicationHealth"),
+  monitoringMessage: document.querySelector("#monitoringMessage"),
   deployForm: document.querySelector("#deployForm"),
   templateSelect: document.querySelector("#templateSelect"),
   imageSelect: document.querySelector("#imageSelect"),
@@ -151,6 +157,8 @@ function statusClass(status) {
 }
 
 function renderApps(apps) {
+  const running = apps.filter((app) => app.status === "running").length;
+  elements.applicationHealth.textContent = `${running} running / ${apps.length} total`;
   if (!apps.length) {
     elements.appsList.innerHTML = '<p class="meta">No apps yet. Deploy your first image above.</p>';
     return;
@@ -222,14 +230,26 @@ function clusterPayload() {
     cloud_provider: "aws",
     config: {
       aws_region: document.querySelector("#awsRegion").value.trim(),
-      eks_role_arn: document.querySelector("#eksRoleArn").value.trim(),
-      node_role_arn: document.querySelector("#nodeRoleArn").value.trim(),
-      state_bucket: document.querySelector("#stateBucket").value.trim(),
-      lock_table: document.querySelector("#lockTable").value.trim(),
       public_access_cidrs: [document.querySelector("#publicAccessCidr").value.trim()],
       single_nat_gateway: document.querySelector("#singleNatGateway").checked,
     },
   };
+}
+
+async function loadMonitoring() {
+  const ready = await api("/readyz", { headers: {} });
+  elements.apiHealth.textContent = ready.status;
+  if (!state.token) {
+    elements.clusterHealth.textContent = "sign in required";
+    elements.nodeHealth.textContent = "0 / 0";
+    return;
+  }
+  const cluster = await api("/monitoring/cluster/health");
+  elements.clusterHealth.textContent = cluster.status.replaceAll("_", " ");
+  elements.nodeHealth.textContent = `${cluster.ready_nodes || 0} / ${cluster.nodes || 0}`;
+  elements.monitoringMessage.textContent = cluster.mode === "dry-run"
+    ? "No Kubernetes cluster is connected yet."
+    : "";
 }
 
 async function handleAwsPreflight() {
@@ -387,6 +407,7 @@ elements.registerTab.addEventListener("click", () => setMode("register"));
 elements.authForm.addEventListener("submit", handleAuth);
 elements.clusterForm.addEventListener("submit", handleClusterProvision);
 elements.awsPreflightButton.addEventListener("click", handleAwsPreflight);
+elements.monitoringRefreshButton.addEventListener("click", () => loadMonitoring().catch(() => {}));
 elements.deployForm.addEventListener("submit", handleDeploy);
 elements.templateSelect.addEventListener("change", (event) => applyTemplate(event.target.value));
 elements.imageSelect.addEventListener("change", (event) => applyImage(event.target.value));
@@ -411,9 +432,13 @@ loadSession().catch(() => {
 loadCatalog().catch(() => {});
 loadReadiness().catch(() => {});
 loadInfrastructure().catch(() => {});
+loadMonitoring().catch(() => {});
 loadApps().catch((error) => {
   elements.appsList.innerHTML = `<p class="meta">${error.message}</p>`;
 });
 setInterval(() => {
-  if (state.token) loadInfrastructure().catch(() => {});
+  if (state.token) {
+    loadInfrastructure().catch(() => {});
+    loadMonitoring().catch(() => {});
+  }
 }, 10000);

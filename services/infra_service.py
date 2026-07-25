@@ -13,7 +13,6 @@ from app.config import settings
 
 TERRAFORM_TEMPLATE = Path(__file__).resolve().parent.parent / "terraform" / "main.tf.j2"
 AWS_REGION_RE = re.compile(r"^[a-z]{2}-[a-z]+-\d$")
-IAM_ROLE_ARN_RE = re.compile(r"^arn:aws:iam::\d{12}:role\/[A-Za-z0-9+=,.@_/-]+$")
 DEFAULT_CLUSTER_VERSION = "1.34"
 DEFAULT_NODE_INSTANCE_TYPES = ["t3.medium"]
 DEFAULT_TAGS = {
@@ -132,13 +131,6 @@ def _build_context(name: str, config: dict[str, Any]) -> dict[str, Any]:
     if not AWS_REGION_RE.match(aws_region):
         raise ValueError("aws_region must look like a valid AWS region, for example us-east-1")
 
-    eks_role_arn = config.get("eks_role_arn")
-    if not eks_role_arn or not IAM_ROLE_ARN_RE.match(eks_role_arn):
-        raise ValueError("eks_role_arn is required and must be a valid IAM role ARN")
-    node_role_arn = config.get("node_role_arn")
-    if not node_role_arn or not IAM_ROLE_ARN_RE.match(node_role_arn):
-        raise ValueError("node_role_arn is required and must be a valid IAM role ARN")
-
     state_bucket = config.get("state_bucket", settings.TERRAFORM_STATE_BUCKET)
     lock_table = config.get("lock_table", settings.TERRAFORM_LOCK_TABLE)
     if state_bucket == "replace-me-terraform-state" or lock_table == "replace-me-terraform-locks":
@@ -188,8 +180,6 @@ def _build_context(name: str, config: dict[str, Any]) -> dict[str, Any]:
         "aws_region": aws_region,
         "cluster_name": name,
         "cluster_version": config.get("cluster_version", DEFAULT_CLUSTER_VERSION),
-        "eks_role_arn": eks_role_arn,
-        "node_role_arn": node_role_arn,
         "state_bucket": state_bucket,
         "lock_table": lock_table,
         "vpc_cidr": _validate_cidr(config.get("vpc_cidr", "10.0.0.0/16"), "vpc_cidr"),
