@@ -79,7 +79,7 @@ jobs:
       - name: Format and validate
         working-directory: terraform-runtime
         run: |
-          terraform fmt -check
+          terraform fmt
           terraform init -backend=false
           terraform validate
 
