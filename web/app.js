@@ -262,7 +262,9 @@ async function handleAppAction(event) {
 
     if (action === "logs") {
       elements.logsTarget.textContent = `${button.dataset.namespace}/${button.dataset.name}`;
-      const logs = await api(`/logs/${button.dataset.name}?namespace=${button.dataset.namespace}`);
+      const logs = await api(
+        `/monitoring/logs/${encodeURIComponent(button.dataset.name)}?namespace=${encodeURIComponent(button.dataset.namespace)}`
+      );
       elements.logsOutput.textContent = logs.logs;
     }
 

@@ -53,8 +53,6 @@ app.include_router(
 app.include_router(catalog.router, prefix="/catalog", tags=["catalog"], dependencies=[Depends(rate_limiter)])
 app.include_router(kubernetes.router, prefix="/kubernetes", tags=["kubernetes"], dependencies=[Depends(rate_limiter)])
 app.include_router(monitoring.router, prefix="/monitoring", tags=["monitoring"], dependencies=[Depends(rate_limiter)])
-app.include_router(kubernetes.router, tags=["kubernetes"], dependencies=[Depends(rate_limiter)])
-app.include_router(monitoring.router, tags=["monitoring"], dependencies=[Depends(rate_limiter)])
 app.mount("/dashboard", StaticFiles(directory="web", html=True), name="dashboard")
 
 

@@ -37,5 +37,42 @@ jobs:
       - name: Push Docker image (optional)
         if: github.ref == 'refs/heads/main'
         run: echo "Configure registry login and docker push here"
-      - name: Deploy to Kubernetes (optional)
-        run: echo "Deploy with Helm or ArgoCD after registry configuration"
+
+  deploy-vm:
+    name: Deploy to Ubuntu VM
+    needs: build
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: [self-hosted, linux, idp-vm]
+    env:
+      IMAGE_NAME: idp-api
+      CONTAINER_NAME: idp-api
+      APP_PORT: "8000"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create runtime environment file
+        env:
+          APP_ENV: ${{ secrets.APP_ENV }}
+        run: |
+          test -n "$APP_ENV"
+          printf '%s\n' "$APP_ENV" > .env
+          chmod 600 .env
+
+      - name: Build Docker image on VM
+        run: docker build -t $IMAGE_NAME:${{ github.sha }} -t $IMAGE_NAME:latest .
+
+      - name: Deploy container
+        run: |
+          docker stop $CONTAINER_NAME || true
+          docker rm $CONTAINER_NAME || true
+          docker run -d \
+            --name $CONTAINER_NAME \
+            --restart unless-stopped \
+            --env-file .env \
+            -p $APP_PORT:8000 \
+            $IMAGE_NAME:${{ github.sha }}
+
+      - name: Check health
+        run: |
+          sleep 5
+          curl --fail http://127.0.0.1:$APP_PORT/healthz

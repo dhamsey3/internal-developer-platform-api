@@ -175,16 +175,16 @@ tests/            Unit tests
 
 ### Kubernetes Operations
 
-- `POST /namespace/create` - Create a namespace
-- `POST /service/expose` - Expose a service
-- `POST /autoscaling/create` - Configure auto-scaling
+- `POST /kubernetes/namespace/create` - Create a namespace
+- `POST /kubernetes/service/expose` - Expose a service
+- `POST /kubernetes/autoscaling/create` - Configure auto-scaling
 - `POST /kubernetes/ingress/create` - Create ingress rules
 
 ### Monitoring
 
-- `GET /cluster/health` - Get cluster health status
-- `GET /metrics` - Prometheus metrics endpoint
-- `GET /logs/{pod}?namespace=default` - Retrieve pod logs
+- `GET /monitoring/cluster/health` - Get cluster health status
+- `GET /monitoring/metrics` - Prometheus metrics endpoint
+- `GET /monitoring/logs/{pod}?namespace=default` - Retrieve pod logs
 
 ### Documentation
 
@@ -365,7 +365,7 @@ helm upgrade --install idp-api helm/charts/idp-api \
 
 ## Observability
 
-The API exposes Prometheus metrics at `/metrics`. Example scrape configuration and Grafana dashboard starters live in the `monitoring/` directory.
+The API exposes Prometheus metrics at `/monitoring/metrics`. Example scrape configuration and Grafana dashboard starters live in the `monitoring/` directory.
 
 ### Recommended Production Stack
 
