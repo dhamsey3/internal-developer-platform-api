@@ -159,6 +159,7 @@ Before setting `TERRAFORM_DRY_RUN=false`:
 - Keep `single_nat_gateway=true` for a lower-cost development cluster. Set it to `false` for one NAT gateway per Availability Zone in a highly available environment.
 
 After Terraform creates the cluster, the IDP runs `aws eks update-kubeconfig` so subsequent application deployment requests target the new EKS cluster.
+The VM deployment stores that kubeconfig in the persistent `idp-kubeconfig` Docker volume so releases do not disconnect the IDP from EKS.
 
 > Amazon EKS and NAT gateways incur AWS charges. Review the Terraform request and AWS pricing before disabling dry-run mode.
 
@@ -380,6 +381,14 @@ helm upgrade --install idp-api helm/charts/idp-api \
 - Helm defaults: public registration disabled, debug disabled, read-only root filesystem, dropped Linux capabilities
 - Kubernetes RBAC and network-policy examples
 - No hardcoded production secret requirement in Helm
+
+### Create or Reset an Administrator
+
+Public registration should remain disabled in production. Create or reset an administrator from the Ubuntu VM:
+
+```bash
+docker exec -it idp-api python -m app.admin create --username admin
+```
 
 ### Recommended for Production
 

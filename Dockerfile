@@ -23,8 +23,8 @@ RUN pip install --no-cache-dir -r requirements.txt \
 COPY . .
 
 # Change ownership and permissions
-RUN mkdir -p /data \
-	&& chown -R appuser:appuser /app /data
+RUN mkdir -p /data /home/appuser/.kube \
+	&& chown -R appuser:appuser /app /data /home/appuser/.kube
 USER appuser
 
 ENV PYTHONUNBUFFERED=1

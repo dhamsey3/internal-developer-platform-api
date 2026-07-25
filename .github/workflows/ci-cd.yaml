@@ -82,6 +82,7 @@ jobs:
             --env-file .env \
             --env DATABASE_URL=sqlite:////data/idp.db \
             --volume idp-api-data:/data \
+            --volume idp-kubeconfig:/home/appuser/.kube \
             -p $APP_PORT:8000 \
             $IMAGE_NAME:${{ github.sha }}
 
@@ -102,6 +103,7 @@ jobs:
               --env-file .env \
               --env DATABASE_URL=sqlite:////data/idp.db \
               --volume idp-api-data:/data \
+              --volume idp-kubeconfig:/home/appuser/.kube \
               -p $APP_PORT:8000 \
               "$PREVIOUS_IMAGE"
           fi
