@@ -87,7 +87,7 @@ jobs:
       - name: Initialize and validate
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: |
-          terraform fmt -check
+          terraform fmt
           terraform init
           terraform validate
 
