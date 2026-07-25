@@ -90,7 +90,10 @@
             <input id="singleNatGateway" type="checkbox" checked />
             Use one NAT gateway for this development cluster
           </label>
-          <button class="wide" type="submit">Provision EKS Cluster</button>
+          <div class="wide form-actions">
+            <button id="awsPreflightButton" class="ghost" type="button">Validate AWS Setup</button>
+            <button type="submit">Provision EKS Cluster</button>
+          </div>
         </form>
         <p id="clusterMessage" class="message"></p>
       </section>

@@ -156,6 +156,15 @@ h2 {
   height: 16px;
 }
 
+.form-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.form-actions button {
+  flex: 1;
+}
+
 label {
   display: grid;
   gap: 6px;

@@ -1,6 +1,7 @@
 import ipaddress
 import os
 import re
+import shutil
 import subprocess
 import tempfile
 from pathlib import Path
@@ -70,6 +71,42 @@ def configure_eks_kubeconfig(cluster_name: str, aws_region: str) -> None:
     if proc.returncode != 0:
         stderr = proc.stderr.strip() or proc.stdout.strip()
         raise RuntimeError(f"Failed to configure EKS kubeconfig: {stderr}")
+
+
+def check_aws_prerequisites(name: str, config: dict[str, Any]) -> dict[str, Any]:
+    context = _build_context(name, config)
+    checks = {
+        "terraform": shutil.which("terraform") is not None,
+        "aws_cli": shutil.which("aws") is not None,
+        "identity": False,
+        "state_bucket": False,
+        "lock_table": False,
+    }
+    if not checks["terraform"] or not checks["aws_cli"]:
+        return {"ready": False, "checks": checks}
+
+    commands = {
+        "identity": ["aws", "sts", "get-caller-identity", "--output", "json"],
+        "state_bucket": ["aws", "s3api", "head-bucket", "--bucket", context["state_bucket"]],
+        "lock_table": [
+            "aws",
+            "dynamodb",
+            "describe-table",
+            "--table-name",
+            context["lock_table"],
+            "--region",
+            context["aws_region"],
+            "--output",
+            "json",
+        ],
+    }
+    errors = {}
+    for check, command in commands.items():
+        proc = subprocess.run(command, capture_output=True, text=True, timeout=30)
+        checks[check] = proc.returncode == 0
+        if proc.returncode != 0:
+            errors[check] = proc.stderr.strip() or proc.stdout.strip() or "AWS command failed"
+    return {"ready": all(checks.values()), "checks": checks, "errors": errors}
 
 
 def _validate_cidr(value: str, field_name: str, *, require_ipv4: bool = True) -> str:

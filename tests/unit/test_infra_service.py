@@ -1,5 +1,8 @@
+from types import SimpleNamespace
+
 from services.infra_service import (
     _build_context,
+    check_aws_prerequisites,
     provision_infrastructure,
     render_terraform_config,
     validate_infrastructure_config,
@@ -46,6 +49,19 @@ def test_public_eks_endpoint_rejects_world_access():
     config = {**VALID_CONFIG, "public_access_cidrs": ["0.0.0.0/0"]}
     result = validate_infrastructure_config("platform-dev", "aws", config)
     assert "must not expose the EKS API" in result
+
+
+def test_aws_preflight_checks_identity_and_backend(monkeypatch):
+    monkeypatch.setattr("services.infra_service.shutil.which", lambda command: f"/usr/bin/{command}")
+    monkeypatch.setattr(
+        "services.infra_service.subprocess.run",
+        lambda *args, **kwargs: SimpleNamespace(returncode=0, stdout="{}", stderr=""),
+    )
+
+    result = check_aws_prerequisites("platform-dev", VALID_CONFIG)
+
+    assert result["ready"] is True
+    assert all(result["checks"].values())
 
 
 def test_decode_infrastructure_queue_job():

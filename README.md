@@ -158,6 +158,8 @@ Before setting `TERRAFORM_DRY_RUN=false`:
 - Restrict `public_access_cidrs` to the IDP VM's public egress address, such as `203.0.113.10/32`. The API rejects `0.0.0.0/0`.
 - Keep `single_nat_gateway=true` for a lower-cost development cluster. Set it to `false` for one NAT gateway per Availability Zone in a highly available environment.
 
+Use **Validate AWS Setup** in the dashboard before provisioning. The admin-only preflight checks the Terraform and AWS CLIs, the active AWS identity, the S3 state bucket, and the DynamoDB lock table without creating infrastructure.
+
 After Terraform creates the cluster, the IDP runs `aws eks update-kubeconfig` so subsequent application deployment requests target the new EKS cluster.
 The VM deployment stores that kubeconfig in the persistent `idp-kubeconfig` Docker volume so releases do not disconnect the IDP from EKS.
 

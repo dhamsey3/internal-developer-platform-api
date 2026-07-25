@@ -20,6 +20,7 @@ const elements = {
   clusterForm: document.querySelector("#clusterForm"),
   clusterStatus: document.querySelector("#clusterStatus"),
   clusterMessage: document.querySelector("#clusterMessage"),
+  awsPreflightButton: document.querySelector("#awsPreflightButton"),
   deployForm: document.querySelector("#deployForm"),
   templateSelect: document.querySelector("#templateSelect"),
   imageSelect: document.querySelector("#imageSelect"),
@@ -215,10 +216,8 @@ async function loadInfrastructure() {
   renderInfrastructure(await api("/infrastructure"));
 }
 
-async function handleClusterProvision(event) {
-  event.preventDefault();
-  elements.clusterMessage.textContent = "Submitting EKS provisioning request...";
-  const payload = {
+function clusterPayload() {
+  return {
     name: document.querySelector("#clusterName").value.trim(),
     cloud_provider: "aws",
     config: {
@@ -231,10 +230,34 @@ async function handleClusterProvision(event) {
       single_nat_gateway: document.querySelector("#singleNatGateway").checked,
     },
   };
+}
+
+async function handleAwsPreflight() {
+  if (!elements.clusterForm.reportValidity()) return;
+  elements.clusterMessage.textContent = "Validating AWS credentials and Terraform backend...";
+  try {
+    const result = await api("/infrastructure/preflight", {
+      method: "POST",
+      body: JSON.stringify(clusterPayload()),
+    });
+    elements.clusterMessage.textContent = result.ready
+      ? "AWS setup is ready for EKS provisioning."
+      : `AWS setup is incomplete: ${Object.entries(result.checks)
+          .filter(([, passed]) => !passed)
+          .map(([check]) => check.replaceAll("_", " "))
+          .join(", ")}.`;
+  } catch (error) {
+    elements.clusterMessage.textContent = error.message;
+  }
+}
+
+async function handleClusterProvision(event) {
+  event.preventDefault();
+  elements.clusterMessage.textContent = "Submitting EKS provisioning request...";
   try {
     const cluster = await api("/infrastructure/create", {
       method: "POST",
-      body: JSON.stringify(payload),
+      body: JSON.stringify(clusterPayload()),
     });
     renderInfrastructure([cluster]);
   } catch (error) {
@@ -363,6 +386,7 @@ elements.loginTab.addEventListener("click", () => setMode("login"));
 elements.registerTab.addEventListener("click", () => setMode("register"));
 elements.authForm.addEventListener("submit", handleAuth);
 elements.clusterForm.addEventListener("submit", handleClusterProvision);
+elements.awsPreflightButton.addEventListener("click", handleAwsPreflight);
 elements.deployForm.addEventListener("submit", handleDeploy);
 elements.templateSelect.addEventListener("change", (event) => applyTemplate(event.target.value));
 elements.imageSelect.addEventListener("change", (event) => applyImage(event.target.value));

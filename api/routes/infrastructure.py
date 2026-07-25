@@ -6,9 +6,20 @@ from auth.rbac import get_current_user, require_role
 from database.models import Infrastructure, User
 from database.session import get_db
 from services.infra_queue import InfrastructureQueueError, enqueue_infrastructure_job
-from services.infra_service import validate_infrastructure_config
+from services.infra_service import check_aws_prerequisites, validate_infrastructure_config
 
 router = APIRouter()
+
+
+@router.post("/preflight")
+def infrastructure_preflight(
+    request: InfrastructureCreateRequest,
+    current_user: User = Depends(require_role("admin")),
+):
+    try:
+        return check_aws_prerequisites(request.name, request.config)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.post("/create", response_model=InfrastructureResponse, status_code=202)
