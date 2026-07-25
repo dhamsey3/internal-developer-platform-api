@@ -2,7 +2,7 @@
 
 ## Infrastructure
 - [ ] Terraform S3 backend is encrypted, versioned, and blocks public access
-- [ ] GitHub OIDC role trust is restricted to this repository and `main`
+- [ ] Separate GitHub OIDC plan and apply roles have narrowly restricted trust policies
 - [ ] `aws-sandbox` environment requires reviewer approval
 - [ ] AWS Budget alerts are configured in the sandbox account
 - [ ] AWS resources provisioned (VPC, EKS, IAM)
