@@ -1,6 +1,8 @@
 const state = {
   token: localStorage.getItem("idp_token") || "",
+  currentUser: null,
   mode: "login",
+  kubernetesDryRun: true,
   catalog: { apps: [], images: [] },
   selectedTemplate: null,
 };
@@ -15,6 +17,9 @@ const elements = {
   authMessage: document.querySelector("#authMessage"),
   username: document.querySelector("#username"),
   password: document.querySelector("#password"),
+  clusterForm: document.querySelector("#clusterForm"),
+  clusterStatus: document.querySelector("#clusterStatus"),
+  clusterMessage: document.querySelector("#clusterMessage"),
   deployForm: document.querySelector("#deployForm"),
   templateSelect: document.querySelector("#templateSelect"),
   imageSelect: document.querySelector("#imageSelect"),
@@ -66,13 +71,21 @@ function setMode(mode) {
 }
 
 function setSignedIn(signedIn) {
-  elements.sessionStatus.textContent = signedIn ? "Signed in" : "Signed out";
+  elements.sessionStatus.textContent = state.currentUser
+    ? `${state.currentUser.username} (${state.currentUser.role})`
+    : signedIn ? "Signed in" : "Signed out";
   elements.logoutButton.disabled = !signedIn;
   elements.refreshButton.disabled = !signedIn;
   elements.deployForm.querySelectorAll("input, textarea, select, button").forEach((field) => {
     field.disabled = !signedIn;
   });
+  elements.clusterForm.querySelectorAll("input, button").forEach((field) => {
+    field.disabled = !signedIn || state.currentUser?.role !== "admin";
+  });
   elements.deployMessage.textContent = signedIn ? "" : "Sign in to deploy and manage apps.";
+  if (signedIn && state.currentUser?.role !== "admin") {
+    elements.clusterMessage.textContent = "Administrator access is required to provision AWS infrastructure.";
+  }
 }
 
 function setValue(selector, value) {
@@ -168,7 +181,65 @@ function renderApps(apps) {
 
 async function loadReadiness() {
   const ready = await api("/readyz", { headers: {} });
+  state.kubernetesDryRun = ready.kubernetes_dry_run;
   elements.modePill.textContent = ready.kubernetes_dry_run || ready.terraform_dry_run ? "dry-run" : ready.environment;
+  const deployButton = elements.deployForm.querySelector('button[type="submit"]');
+  deployButton.disabled = !state.token || ready.kubernetes_dry_run;
+  if (ready.kubernetes_dry_run && state.token) {
+    elements.deployMessage.textContent = "Kubernetes is in dry-run mode. Provision and connect an EKS cluster first.";
+  }
+}
+
+async function loadSession() {
+  if (!state.token) return;
+  state.currentUser = await api("/auth/me");
+  setSignedIn(true);
+}
+
+function renderInfrastructure(items) {
+  const cluster = items[0];
+  if (!cluster) {
+    elements.clusterStatus.textContent = "not provisioned";
+    return;
+  }
+  elements.clusterStatus.textContent = cluster.status;
+  elements.clusterStatus.className = statusClass(cluster.status);
+  elements.clusterMessage.textContent = cluster.last_error || `${cluster.name} is ${cluster.status}.`;
+}
+
+async function loadInfrastructure() {
+  if (!state.token) {
+    renderInfrastructure([]);
+    return;
+  }
+  renderInfrastructure(await api("/infrastructure"));
+}
+
+async function handleClusterProvision(event) {
+  event.preventDefault();
+  elements.clusterMessage.textContent = "Submitting EKS provisioning request...";
+  const payload = {
+    name: document.querySelector("#clusterName").value.trim(),
+    cloud_provider: "aws",
+    config: {
+      aws_region: document.querySelector("#awsRegion").value.trim(),
+      eks_role_arn: document.querySelector("#eksRoleArn").value.trim(),
+      node_role_arn: document.querySelector("#nodeRoleArn").value.trim(),
+      state_bucket: document.querySelector("#stateBucket").value.trim(),
+      lock_table: document.querySelector("#lockTable").value.trim(),
+      public_access_cidrs: [document.querySelector("#publicAccessCidr").value.trim()],
+      single_nat_gateway: document.querySelector("#singleNatGateway").checked,
+    },
+  };
+  try {
+    const cluster = await api("/infrastructure/create", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    renderInfrastructure([cluster]);
+  } catch (error) {
+    elements.clusterMessage.textContent = error.message;
+  }
 }
 
 async function loadApps() {
@@ -200,9 +271,11 @@ async function handleAuth(event) {
     });
     state.token = login.access_token;
     localStorage.setItem("idp_token", state.token);
+    await loadSession();
     setSignedIn(true);
     elements.authMessage.textContent = "Signed in.";
     await loadApps();
+    await loadInfrastructure();
   } catch (error) {
     elements.authMessage.textContent = error.message;
   }
@@ -289,6 +362,7 @@ async function handleAppAction(event) {
 elements.loginTab.addEventListener("click", () => setMode("login"));
 elements.registerTab.addEventListener("click", () => setMode("register"));
 elements.authForm.addEventListener("submit", handleAuth);
+elements.clusterForm.addEventListener("submit", handleClusterProvision);
 elements.deployForm.addEventListener("submit", handleDeploy);
 elements.templateSelect.addEventListener("change", (event) => applyTemplate(event.target.value));
 elements.imageSelect.addEventListener("change", (event) => applyImage(event.target.value));
@@ -296,14 +370,26 @@ elements.refreshButton.addEventListener("click", loadApps);
 elements.appsList.addEventListener("click", handleAppAction);
 elements.logoutButton.addEventListener("click", () => {
   state.token = "";
+  state.currentUser = null;
   localStorage.removeItem("idp_token");
   setSignedIn(false);
+  renderInfrastructure([]);
   renderApps([]);
 });
 
 setSignedIn(Boolean(state.token));
+loadSession().catch(() => {
+  state.token = "";
+  state.currentUser = null;
+  localStorage.removeItem("idp_token");
+  setSignedIn(false);
+});
 loadCatalog().catch(() => {});
 loadReadiness().catch(() => {});
+loadInfrastructure().catch(() => {});
 loadApps().catch((error) => {
   elements.appsList.innerHTML = `<p class="meta">${error.message}</p>`;
 });
+setInterval(() => {
+  if (state.token) loadInfrastructure().catch(() => {});
+}, 10000);

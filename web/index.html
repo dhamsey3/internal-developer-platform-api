@@ -52,6 +52,49 @@
         <p id="authMessage" class="message"></p>
       </section>
 
+      <section class="panel cluster-panel">
+        <div class="panel-heading">
+          <h2>AWS Cluster</h2>
+          <span id="clusterStatus" class="pill">not provisioned</span>
+        </div>
+        <form id="clusterForm" class="form grid-form">
+          <label>
+            Cluster name
+            <input id="clusterName" required minlength="3" maxlength="63" pattern="[a-z0-9]([-a-z0-9]*[a-z0-9])?" placeholder="platform-dev" />
+          </label>
+          <label>
+            AWS region
+            <input id="awsRegion" required value="us-east-1" pattern="[a-z]{2}-[a-z]+-[0-9]" />
+          </label>
+          <label class="wide">
+            EKS cluster role ARN
+            <input id="eksRoleArn" required placeholder="arn:aws:iam::123456789012:role/EKSClusterRole" />
+          </label>
+          <label class="wide">
+            EKS node role ARN
+            <input id="nodeRoleArn" required placeholder="arn:aws:iam::123456789012:role/EKSNodeRole" />
+          </label>
+          <label>
+            Terraform state bucket
+            <input id="stateBucket" required placeholder="company-terraform-state" />
+          </label>
+          <label>
+            DynamoDB lock table
+            <input id="lockTable" required placeholder="company-terraform-locks" />
+          </label>
+          <label class="wide">
+            IDP public egress CIDR
+            <input id="publicAccessCidr" required placeholder="203.0.113.10/32" pattern="([0-9]{1,3}\.){3}[0-9]{1,3}/[0-9]{1,2}" />
+          </label>
+          <label class="checkbox-label wide">
+            <input id="singleNatGateway" type="checkbox" checked />
+            Use one NAT gateway for this development cluster
+          </label>
+          <button class="wide" type="submit">Provision EKS Cluster</button>
+        </form>
+        <p id="clusterMessage" class="message"></p>
+      </section>
+
       <section class="panel deploy-panel">
         <div class="panel-heading">
           <h2>Create App</h2>

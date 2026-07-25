@@ -2,7 +2,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from api.schemas import InfrastructureCreateRequest, InfrastructureResponse
-from auth.rbac import get_current_user
+from auth.rbac import get_current_user, require_role
 from database.models import Infrastructure, User
 from database.session import get_db
 from services.infra_queue import InfrastructureQueueError, enqueue_infrastructure_job
@@ -16,7 +16,7 @@ def create_infrastructure(
     request: InfrastructureCreateRequest,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_role("admin")),
 ):
     validation_error = validate_infrastructure_config(request.name, request.cloud_provider, request.config)
     if validation_error:
@@ -48,7 +48,7 @@ def delete_infrastructure(
     id: int,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_role("admin")),
 ):
     infra = db.query(Infrastructure).filter(Infrastructure.id == id, Infrastructure.owner_id == current_user.id).first()
     if not infra:
@@ -71,6 +71,19 @@ def delete_infrastructure(
         db.commit()
         raise HTTPException(status_code=503, detail=str(exc))
     return {"id": id, "status": infra.status}
+
+
+@router.get("", response_model=list[InfrastructureResponse])
+def list_infrastructure(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return (
+        db.query(Infrastructure)
+        .filter(Infrastructure.owner_id == current_user.id)
+        .order_by(Infrastructure.created_at.desc())
+        .all()
+    )
 
 
 @router.get("/{id}", response_model=InfrastructureResponse)
