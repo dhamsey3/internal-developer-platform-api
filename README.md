@@ -156,13 +156,14 @@ Keep `TERRAFORM_DRY_RUN=true` in the IDP application. AWS infrastructure is exec
 1. Use a dedicated AWS sandbox account and configure an AWS Budget with email alerts.
 2. Create a private S3 state bucket with versioning, server-side encryption, and public access blocked.
 3. Add the GitHub OIDC provider `token.actions.githubusercontent.com` to AWS IAM.
-4. Create a least-privilege deployment role whose trust policy allows only these GitHub OIDC subjects:
-   `repo:dhamsey3/internal-developer-platform-api:ref:refs/heads/main` for plans and
-   `repo:dhamsey3/internal-developer-platform-api:environment:aws-sandbox` for approved execution.
-   Also require the audience `sts.amazonaws.com`.
-5. In the GitHub repository, create these Actions variables:
-   `AWS_REGION`, `TF_STATE_BUCKET`, and `AWS_DEPLOY_ROLE_ARN`.
-6. Create the GitHub environment `aws-sandbox`, add required reviewers, prevent administrators from bypassing approval, and limit deployment branches to `main`.
+4. Create a plan role with read-only infrastructure permissions plus access to the S3 state and lock objects. Its trust policy must allow only
+   `repo:dhamsey3/internal-developer-platform-api:ref:refs/heads/main`.
+5. Create a separate apply role with the permissions needed to manage the declared VPC, EKS, EC2, and prefixed IAM resources. Its trust policy must allow only
+   `repo:dhamsey3/internal-developer-platform-api:environment:aws-sandbox`.
+   Both roles must require the audience `sts.amazonaws.com`.
+6. In the GitHub repository, create these Actions variables:
+   `AWS_REGION`, `TF_STATE_BUCKET`, `AWS_PLAN_ROLE_ARN`, and `AWS_APPLY_ROLE_ARN`.
+7. Create the GitHub environment `aws-sandbox`, add required reviewers, prevent administrators from bypassing approval, and limit deployment branches to `main`.
 
 Do not add `AWS_ACCESS_KEY_ID` or `AWS_SECRET_ACCESS_KEY` to GitHub, `.env`, or the VM. GitHub exchanges its OIDC token for temporary role credentials on each job.
 
