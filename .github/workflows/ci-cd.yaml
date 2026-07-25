@@ -42,7 +42,7 @@ jobs:
     name: Deploy to Ubuntu VM
     needs: build
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    runs-on: [self-hosted, linux, idp-vm]
+    runs-on: [self-hosted, linux]
     env:
       IMAGE_NAME: idp-api
       CONTAINER_NAME: idp-api
