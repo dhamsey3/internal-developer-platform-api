@@ -13,6 +13,7 @@
 ## Table of Contents
 
 - [Overview](#overview)
+- [Live Deployment](#live-deployment)
 - [Quick Start](#quick-start)
 - [Prerequisites](#prerequisites)
 - [Features](#features)
@@ -35,6 +36,15 @@
 ## Overview
 
 The **Internal Developer Platform (IDP) API** is a FastAPI-based platform that enables self-service cloud infrastructure provisioning and application deployments. It abstracts the complexity of Kubernetes and Terraform, allowing developers to deploy containerized applications and provision AWS infrastructure through simple API calls or a web dashboard.
+
+## Live Deployment
+
+- [Developer dashboard](https://compounds-tourism-convergence-induction.trycloudflare.com/dashboard/)
+- [Interactive API documentation](https://compounds-tourism-convergence-induction.trycloudflare.com/docs)
+- [Health check](https://compounds-tourism-convergence-induction.trycloudflare.com/healthz)
+- [GitHub repository](https://github.com/dhamsey3/internal-developer-platform-api)
+
+The hosted demo runs on an Ubuntu VM through a Cloudflare Quick Tunnel. The URL remains available while the `idp-cloudflare` service is running, but Cloudflare may assign a new hostname after the service or VM restarts.
 
 ### Use Cases
 
