@@ -60,6 +60,10 @@ ADAPTERS = {
     "gcp_cloud_run": SetupRequiredAdapter("Connect a Google Cloud project"),
 }
 
+SUPPORTED_RESOURCES = {
+    "linux_docker": {"postgresql", "secrets"},
+}
+
 
 def destination_readiness(destination: Destination) -> dict[str, Any]:
     adapter = ADAPTERS.get(destination.kind, DestinationAdapter())
@@ -77,9 +81,11 @@ def seed_destinations(db: Session) -> None:
                 "enabled": settings.DEFAULT_DESTINATION_ENABLED,
                 "runner_label": settings.DEFAULT_RUNNER_LABEL,
                 "base_url": settings.DEFAULT_DESTINATION_URL,
-                "deployment_workflow": False,
+                "deployment_workflow": bool(
+                    settings.GITHUB_DISPATCH_TOKEN and settings.DEPLOYMENT_CALLBACK_TOKEN
+                ),
             },
-            "capabilities": ["containers", "persistent_storage"],
+            "capabilities": ["containers", "persistent_storage", "postgresql", "secrets"],
             "is_default": True,
         },
         {
@@ -106,6 +112,19 @@ def seed_destinations(db: Session) -> None:
         if destination is None:
             destination = Destination(**item)
             db.add(destination)
+        elif destination.is_default and destination.kind == "linux_docker":
+            config = destination.config or {}
+            destination.config = {
+                **config,
+                "enabled": settings.DEFAULT_DESTINATION_ENABLED,
+                "runner_label": settings.DEFAULT_RUNNER_LABEL,
+                "base_url": settings.DEFAULT_DESTINATION_URL,
+                "deployment_workflow": bool(
+                    settings.GITHUB_DISPATCH_TOKEN and settings.DEPLOYMENT_CALLBACK_TOKEN
+                ),
+            }
+            destination.capabilities = item["capabilities"]
+            db.add(destination)
     db.commit()
 
 
@@ -113,3 +132,18 @@ def refresh_destination_status(destination: Destination) -> dict[str, Any]:
     readiness = destination_readiness(destination)
     destination.status = "ready" if readiness["ready"] else "setup_required"
     return readiness
+
+
+def resources_readiness(destination: Destination, requested: list[str]) -> dict[str, dict[str, Any]]:
+    supported = SUPPORTED_RESOURCES.get(destination.kind, set())
+    return {
+        resource: {
+            "ready": resource in supported,
+            "message": (
+                "Provided by the destination deployment workflow"
+                if resource in supported
+                else "Resource provisioning is not configured for this destination"
+            ),
+        }
+        for resource in requested
+    }
