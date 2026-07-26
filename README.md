@@ -170,6 +170,33 @@ The initial `home-vm`, `local-docker`, and `aws-sandbox` destinations are catalo
 
 The existing `/deployments` Kubernetes API remains available as a compatibility path and is displayed under **Operations**. New provider-neutral application records use `/applications`; configured execution adapters will create deployment records in later phases.
 
+### Home VM Application Delivery
+
+The `home-vm` destination deploys container-image applications through the dedicated `idp-vm` self-hosted runner. The public API does not mount the host Docker socket. A deployment request starts the dedicated GitHub Actions workflow, and the runner reports `deploying`, `running`, or `failed` through an authenticated callback.
+
+One-time operator setup:
+
+1. Create a fine-grained GitHub token limited to this repository with **Actions: write**, which GitHub requires for workflow dispatch events.
+2. Generate a separate callback token, for example `openssl rand -hex 32`.
+3. Add both values to the VM `APP_ENV` secret as `GITHUB_DISPATCH_TOKEN` and `DEPLOYMENT_CALLBACK_TOKEN`.
+4. Add the same callback value as the GitHub Actions secret `IDP_CALLBACK_TOKEN`.
+5. Add repository variable `IDP_API_URL` with the stable IDP API origin.
+6. Optionally add `APPLICATION_BIND_ADDRESS` and `APPLICATION_BASE_URL` for a network address that can reach application host ports. The bind address defaults to `127.0.0.1`; do not use `0.0.0.0` without an intentional firewall policy.
+
+After the next IDP deployment, `home-vm` becomes ready. Container applications can then be deployed or redeployed from their catalog card.
+
+The runner workflow:
+
+- validates every dispatch field before using it in Docker commands
+- binds application ports to VM loopback by default
+- checks the application root URL before declaring success
+- restores the previous image when the new image fails its health check
+- keeps one persistent Docker volume per requested PostgreSQL database
+- generates PostgreSQL credentials on the VM and stores them in a `0600` environment file
+- injects `DATABASE_URL` into the application without sending the password through the API or GitHub payload
+
+The VM-managed environment file is an initial single-server secret adapter, not a replacement for a managed secrets service. AWS deployments should use AWS Secrets Manager or an equivalent external secret provider.
+
 ---
 
 ## AWS First Deployment
