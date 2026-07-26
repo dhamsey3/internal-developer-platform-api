@@ -16,7 +16,7 @@ const elements = Object.fromEntries(
     "applicationForm", "templateSelect", "appName", "imageField", "image", "repositoryField",
     "repositoryUrl", "port", "environment", "destinationSelect", "selectedDestinationReadiness",
     "applicationReview", "applicationMessage", "cancelCreateButton", "applicationList",
-    "refreshButton", "workloadList", "logsTarget", "logsOutput",
+    "refreshButton", "refreshStatus", "workloadList", "logsTarget", "logsOutput",
   ].map((id) => [id, document.querySelector(`#${id}`)])
 );
 
@@ -354,6 +354,30 @@ async function loadApiHealth() {
   }
 }
 
+async function handleRefresh() {
+  if (!state.token) return;
+  elements.refreshButton.disabled = true;
+  elements.refreshButton.textContent = "Refreshing...";
+  elements.refreshStatus.textContent = "";
+  const results = await Promise.allSettled([
+    loadApplications(),
+    loadDestinations(),
+    loadWorkloads(),
+    loadApiHealth(),
+  ]);
+  const failures = results.filter((result) => result.status === "rejected");
+  elements.refreshStatus.textContent = failures.length
+    ? `Updated with ${failures.length} error${failures.length === 1 ? "" : "s"}`
+    : "Up to date";
+  if (failures.length) {
+    elements.logsOutput.textContent = failures
+      .map((result) => result.reason?.message || "Refresh request failed")
+      .join("\n");
+  }
+  elements.refreshButton.textContent = "Refresh";
+  elements.refreshButton.disabled = false;
+}
+
 elements.loginTab.addEventListener("click", () => setMode("login"));
 elements.registerTab.addEventListener("click", () => setMode("register"));
 elements.authForm.addEventListener("submit", handleAuth);
@@ -373,7 +397,7 @@ elements.templateSelect.addEventListener("change", (event) => applyTemplate(even
 elements.destinationSelect.addEventListener("change", renderSelectedDestination);
 elements.applicationForm.addEventListener("input", updateReview);
 document.querySelectorAll('input[name="sourceType"]').forEach((input) => input.addEventListener("change", updateSourceFields));
-elements.refreshButton.addEventListener("click", () => Promise.all([loadApplications(), loadDestinations(), loadWorkloads()]));
+elements.refreshButton.addEventListener("click", handleRefresh);
 elements.workloadList.addEventListener("click", handleWorkloadAction);
 elements.applicationList.addEventListener("click", handleApplicationAction);
 
