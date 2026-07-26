@@ -99,9 +99,17 @@ jobs:
       - name: Create runtime environment file
         env:
           APP_ENV: ${{ secrets.APP_ENV }}
+          GITHUB_DISPATCH_TOKEN: ${{ secrets.GITHUB_DISPATCH_TOKEN }}
+          DEPLOYMENT_CALLBACK_TOKEN: ${{ secrets.DEPLOYMENT_CALLBACK_TOKEN }}
         run: |
           test -n "$APP_ENV"
-          printf '%s\n' "$APP_ENV" > .env
+          test -n "$GITHUB_DISPATCH_TOKEN"
+          test -n "$DEPLOYMENT_CALLBACK_TOKEN"
+          {
+            printf '%s\n' "$APP_ENV"
+            printf 'GITHUB_DISPATCH_TOKEN=%s\n' "$GITHUB_DISPATCH_TOKEN"
+            printf 'DEPLOYMENT_CALLBACK_TOKEN=%s\n' "$DEPLOYMENT_CALLBACK_TOKEN"
+          } > .env
           chmod 600 .env
 
       - name: Build Docker image on VM

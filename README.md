@@ -178,10 +178,11 @@ One-time operator setup:
 
 1. Create a fine-grained GitHub token limited to this repository with **Actions: write**, which GitHub requires for workflow dispatch events.
 2. Generate a separate callback token, for example `openssl rand -hex 32`.
-3. Add both values to the VM `APP_ENV` secret as `GITHUB_DISPATCH_TOKEN` and `DEPLOYMENT_CALLBACK_TOKEN`.
-4. Add the same callback value as the GitHub Actions secret `IDP_CALLBACK_TOKEN`.
-5. Add repository variable `IDP_API_URL` with the stable IDP API origin.
-6. Optionally add `APPLICATION_BIND_ADDRESS` and `APPLICATION_BASE_URL` for a network address that can reach application host ports. The bind address defaults to `127.0.0.1`; do not use `0.0.0.0` without an intentional firewall policy.
+3. Add the fine-grained token as the GitHub Actions secret `GITHUB_DISPATCH_TOKEN`.
+4. Add the callback value as the separate GitHub Actions secret `DEPLOYMENT_CALLBACK_TOKEN`.
+5. Leave the existing multiline `APP_ENV` secret unchanged. The deployment pipeline appends both dedicated secrets to the container environment file without replacing `APP_ENV`.
+6. Add repository variable `IDP_API_URL` with the stable IDP API origin.
+7. Optionally add `APPLICATION_BIND_ADDRESS` and `APPLICATION_BASE_URL` for a network address that can reach application host ports. The bind address defaults to `127.0.0.1`; do not use `0.0.0.0` without an intentional firewall policy.
 
 After the next IDP deployment, `home-vm` becomes ready. Container applications can then be deployed or redeployed from their catalog card.
 
