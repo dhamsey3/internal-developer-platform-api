@@ -166,10 +166,24 @@ function renderApplications(applications) {
           <div><dt>Destination</dt><dd>${escapeHtml(application.destination?.name || "unknown")}</dd></div>
           <div><dt>Environment</dt><dd>${escapeHtml(application.environment)}</dd></div>
           <div><dt>Resources</dt><dd>${escapeHtml(resources)}</dd></div>
+          <div><dt>URL</dt><dd>${application.metadata_json.url
+            ? `<a href="${escapeHtml(application.metadata_json.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(application.metadata_json.url)}</a>`
+            : "Not published"}</dd></div>
         </dl>
         ${application.status === "setup_required"
           ? '<p class="notice">This application is cataloged, but its destination or resources still require operator setup.</p>'
           : ""}
+        ${application.metadata_json.last_error
+          ? `<p class="notice">${escapeHtml(application.metadata_json.last_error)}</p>`
+          : ""}
+        <div class="row-actions">
+          ${["ready_to_deploy", "failed", "running"].includes(application.status)
+            ? `<button type="button" data-application-action="deploy" data-id="${application.id}">${application.status === "running" ? "Redeploy" : "Deploy"}</button>`
+            : ""}
+          ${["queued", "deploying"].includes(application.status)
+            ? '<button type="button" disabled>Deployment in progress</button>'
+            : ""}
+        </div>
       </article>
     `;
   }).join("");
@@ -316,6 +330,21 @@ async function handleWorkloadAction(event) {
   }
 }
 
+async function handleApplicationAction(event) {
+  const button = event.target.closest("button[data-application-action]");
+  if (!button) return;
+  button.disabled = true;
+  button.textContent = "Queuing...";
+  try {
+    await api(`/applications/${button.dataset.id}/deploy`, { method: "POST" });
+    await loadApplications();
+  } catch (error) {
+    elements.applicationMessage.textContent = error.message;
+    button.disabled = false;
+    button.textContent = "Deploy";
+  }
+}
+
 async function loadApiHealth() {
   try {
     const readiness = await api("/readyz", { headers: {} });
@@ -346,6 +375,7 @@ elements.applicationForm.addEventListener("input", updateReview);
 document.querySelectorAll('input[name="sourceType"]').forEach((input) => input.addEventListener("change", updateSourceFields));
 elements.refreshButton.addEventListener("click", () => Promise.all([loadApplications(), loadDestinations(), loadWorkloads()]));
 elements.workloadList.addEventListener("click", handleWorkloadAction);
+elements.applicationList.addEventListener("click", handleApplicationAction);
 
 setSignedIn(Boolean(state.token));
 loadCatalog().catch(() => {});
