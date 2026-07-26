@@ -7,12 +7,13 @@ from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
-from api.routes import auth, catalog, deployments, infrastructure, kubernetes, monitoring
+from api.routes import applications, auth, catalog, deployments, destinations, infrastructure, kubernetes, monitoring
 from auth.rate_limit import rate_limiter
 from app.config import settings
 from app.logger import setup_logging
 from app.security import SecurityHeadersMiddleware
 from database.session import SessionLocal, init_db
+from services.destination_service import seed_destinations
 
 setup_logging()
 
@@ -21,8 +22,8 @@ app = FastAPI(
     title=settings.PROJECT_NAME,
     version=settings.VERSION,
     description=(
-        "Internal Developer Platform API for infrastructure provisioning "
-        "and Kubernetes application deployment."
+        "Developer hub for cataloging applications, dependencies, deployment "
+        "destinations, and runtime operations."
     ),
     debug=settings.DEBUG,
 )
@@ -40,6 +41,11 @@ app.add_middleware(
 @app.on_event("startup")
 def on_startup():
     init_db()
+    db = SessionLocal()
+    try:
+        seed_destinations(db)
+    finally:
+        db.close()
 
 
 app.include_router(auth.router, prefix="/auth", tags=["auth"], dependencies=[Depends(rate_limiter)])
@@ -47,6 +53,18 @@ app.include_router(
     infrastructure.router,
     prefix="/infrastructure",
     tags=["infrastructure"],
+    dependencies=[Depends(rate_limiter)],
+)
+app.include_router(
+    applications.router,
+    prefix="/applications",
+    tags=["applications"],
+    dependencies=[Depends(rate_limiter)],
+)
+app.include_router(
+    destinations.router,
+    prefix="/destinations",
+    tags=["destinations"],
     dependencies=[Depends(rate_limiter)],
 )
 app.include_router(
