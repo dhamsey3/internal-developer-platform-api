@@ -99,7 +99,7 @@ jobs:
       - name: Create runtime environment file
         env:
           APP_ENV: ${{ secrets.APP_ENV }}
-          GITHUB_DISPATCH_TOKEN: ${{ secrets.GITHUB_DISPATCH_TOKEN }}
+          GITHUB_DISPATCH_TOKEN: ${{ secrets.IDP_GITHUB_DISPATCH_TOKEN }}
           DEPLOYMENT_CALLBACK_TOKEN: ${{ secrets.DEPLOYMENT_CALLBACK_TOKEN }}
         run: |
           test -n "$APP_ENV"

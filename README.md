@@ -178,7 +178,7 @@ One-time operator setup:
 
 1. Create a fine-grained GitHub token limited to this repository with **Actions: write**, which GitHub requires for workflow dispatch events.
 2. Generate a separate callback token, for example `openssl rand -hex 32`.
-3. Add the fine-grained token as the GitHub Actions secret `GITHUB_DISPATCH_TOKEN`.
+3. Add the fine-grained token as the GitHub Actions secret `IDP_GITHUB_DISPATCH_TOKEN`.
 4. Add the callback value as the separate GitHub Actions secret `DEPLOYMENT_CALLBACK_TOKEN`.
 5. Leave the existing multiline `APP_ENV` secret unchanged. The deployment pipeline appends both dedicated secrets to the container environment file without replacing `APP_ENV`.
 6. Add repository variable `IDP_API_URL` with the stable IDP API origin.
