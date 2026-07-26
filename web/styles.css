@@ -173,6 +173,18 @@ h3 {
   margin-bottom: 16px;
 }
 
+.refresh-control {
+  display: grid;
+  grid-template-columns: minmax(90px, auto) 104px;
+  align-items: center;
+  gap: 10px;
+  text-align: right;
+}
+
+.refresh-control button {
+  width: 104px;
+}
+
 .form {
   display: grid;
   gap: 12px;
