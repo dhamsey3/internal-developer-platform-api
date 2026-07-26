@@ -1,7 +1,7 @@
 FROM python:3.11-slim
 
 ARG TARGETARCH
-ARG TERRAFORM_VERSION=1.8.5
+ARG TERRAFORM_VERSION=1.10.5
 
 # Create non-root user
 RUN apt-get update \
