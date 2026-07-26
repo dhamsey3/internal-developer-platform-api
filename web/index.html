@@ -192,7 +192,10 @@
               <p class="eyebrow">Existing runtime</p>
               <h2>Operations</h2>
             </div>
-            <button id="refreshButton" class="ghost" type="button">Refresh</button>
+            <div class="refresh-control">
+              <span id="refreshStatus" class="meta" role="status" aria-live="polite"></span>
+              <button id="refreshButton" class="ghost" type="button">Refresh</button>
+            </div>
           </div>
           <div id="workloadList" class="workload-list"></div>
           <div class="log-viewer">
