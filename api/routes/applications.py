@@ -1,11 +1,16 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from api.schemas import ApplicationCreateRequest, ApplicationResponse
+import secrets
+
+from fastapi import Header
+
+from app.config import settings
+from api.schemas import ApplicationCreateRequest, ApplicationDeploymentCallback, ApplicationResponse
 from auth.rbac import get_current_user
 from database.models import Application, Destination, User
 from database.session import get_db
-from services.application_service import create_application
+from services.application_service import create_application, dispatch_application_deployment
 from services.destination_service import destination_readiness
 
 router = APIRouter()
@@ -73,4 +78,59 @@ def create_application_route(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     destination = db.query(Destination).filter(Destination.id == application.destination_id).one()
+    return _response(application, destination)
+
+
+@router.post("/{application_id}/deploy", response_model=ApplicationResponse, status_code=202)
+def deploy_application_route(
+    application_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    application = (
+        db.query(Application)
+        .filter(Application.id == application_id, Application.owner_id == current_user.id)
+        .first()
+    )
+    if application is None:
+        raise HTTPException(status_code=404, detail="Application not found")
+    if application.source_type != "container_image":
+        raise HTTPException(status_code=409, detail="Repository builds are not configured yet")
+    destination = db.query(Destination).filter(Destination.id == application.destination_id).one()
+    try:
+        dispatch_application_deployment(application, destination)
+    except (ValueError, RuntimeError) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    db.add(application)
+    db.commit()
+    db.refresh(application)
+    return _response(application, destination)
+
+
+@router.post("/{application_id}/deployment-callback", response_model=ApplicationResponse)
+def application_deployment_callback(
+    application_id: int,
+    callback: ApplicationDeploymentCallback,
+    x_deployment_token: str = Header(default=""),
+    db: Session = Depends(get_db),
+):
+    if not settings.DEPLOYMENT_CALLBACK_TOKEN or not secrets.compare_digest(
+        x_deployment_token,
+        settings.DEPLOYMENT_CALLBACK_TOKEN,
+    ):
+        raise HTTPException(status_code=401, detail="Invalid deployment callback token")
+    application = db.query(Application).filter(Application.id == application_id).first()
+    if application is None:
+        raise HTTPException(status_code=404, detail="Application not found")
+    destination = db.query(Destination).filter(Destination.id == application.destination_id).one()
+    metadata = application.metadata_json or {}
+    application.status = callback.status
+    application.metadata_json = {
+        **metadata,
+        "url": callback.url,
+        "last_error": callback.error,
+    }
+    db.add(application)
+    db.commit()
+    db.refresh(application)
     return _response(application, destination)
