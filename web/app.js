@@ -2,39 +2,32 @@ const state = {
   token: localStorage.getItem("idp_token") || "",
   currentUser: null,
   mode: "login",
-  kubernetesDryRun: true,
   catalog: { apps: [], images: [] },
-  selectedTemplate: null,
+  destinations: [],
+  applications: [],
+  workloads: [],
 };
 
-const elements = {
-  sessionStatus: document.querySelector("#sessionStatus"),
-  logoutButton: document.querySelector("#logoutButton"),
-  loginTab: document.querySelector("#loginTab"),
-  registerTab: document.querySelector("#registerTab"),
-  authForm: document.querySelector("#authForm"),
-  authSubmit: document.querySelector("#authSubmit"),
-  authMessage: document.querySelector("#authMessage"),
-  username: document.querySelector("#username"),
-  password: document.querySelector("#password"),
-  clusterStatus: document.querySelector("#clusterStatus"),
-  clusterMessage: document.querySelector("#clusterMessage"),
-  monitoringRefreshButton: document.querySelector("#monitoringRefreshButton"),
-  apiHealth: document.querySelector("#apiHealth"),
-  clusterHealth: document.querySelector("#clusterHealth"),
-  nodeHealth: document.querySelector("#nodeHealth"),
-  applicationHealth: document.querySelector("#applicationHealth"),
-  monitoringMessage: document.querySelector("#monitoringMessage"),
-  deployForm: document.querySelector("#deployForm"),
-  templateSelect: document.querySelector("#templateSelect"),
-  imageSelect: document.querySelector("#imageSelect"),
-  deployMessage: document.querySelector("#deployMessage"),
-  appsList: document.querySelector("#appsList"),
-  refreshButton: document.querySelector("#refreshButton"),
-  logsTarget: document.querySelector("#logsTarget"),
-  logsOutput: document.querySelector("#logsOutput"),
-  modePill: document.querySelector("#modePill"),
-};
+const elements = Object.fromEntries(
+  [
+    "sessionStatus", "logoutButton", "loginTab", "registerTab", "authForm", "authSubmit",
+    "authMessage", "username", "password", "destinationCount", "destinationList", "apiHealth",
+    "applicationCount", "readyDestinationCount", "workloadCount", "toggleCreateButton",
+    "applicationForm", "templateSelect", "appName", "imageField", "image", "repositoryField",
+    "repositoryUrl", "port", "environment", "destinationSelect", "selectedDestinationReadiness",
+    "applicationReview", "applicationMessage", "cancelCreateButton", "applicationList",
+    "refreshButton", "workloadList", "logsTarget", "logsOutput",
+  ].map((id) => [id, document.querySelector(`#${id}`)])
+);
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
 
 function authHeaders() {
   return state.token ? { Authorization: `Bearer ${state.token}` } : {};
@@ -54,17 +47,15 @@ async function api(path, options = {}) {
   if (!response.ok) {
     const detail = payload.detail || payload || "Request failed";
     if (Array.isArray(detail)) {
-      const message = detail
-        .map((item) => {
-          const field = Array.isArray(item.loc) ? item.loc[item.loc.length - 1] : "request";
-          return `${field}: ${item.msg}`;
-        })
-        .join(". ");
-      throw new Error(message);
+      throw new Error(detail.map((item) => `${item.loc?.at(-1) || "request"}: ${item.msg}`).join(". "));
     }
     throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
   }
   return payload;
+}
+
+function statusClass(status) {
+  return `pill status-${escapeHtml(status)}`;
 }
 
 function setMode(mode) {
@@ -80,310 +71,295 @@ function setSignedIn(signedIn) {
     ? `${state.currentUser.username} (${state.currentUser.role})`
     : signedIn ? "Signed in" : "Signed out";
   elements.logoutButton.disabled = !signedIn;
+  elements.toggleCreateButton.disabled = !signedIn;
   elements.refreshButton.disabled = !signedIn;
-  elements.deployForm.querySelectorAll("input, textarea, select, button").forEach((field) => {
-    field.disabled = !signedIn;
-  });
-  elements.deployMessage.textContent = signedIn ? "" : "Sign in to deploy and manage apps.";
 }
 
-function setValue(selector, value) {
-  document.querySelector(selector).value = value;
+function sourceType() {
+  return document.querySelector('input[name="sourceType"]:checked').value;
+}
+
+function requestedResources() {
+  return [...document.querySelectorAll('input[name="resource"]:checked')].map((input) => input.value);
 }
 
 function renderCatalog(catalog) {
   state.catalog = catalog;
   elements.templateSelect.innerHTML = [
-    '<option value="">Custom app</option>',
-    ...catalog.apps.map((app) => `<option value="${app.id}">${app.name}</option>`),
-  ].join("");
-
-  elements.imageSelect.innerHTML = [
-    '<option value="">Custom image</option>',
-    ...catalog.images.map((image) => `<option value="${image.image}">${image.label}</option>`),
+    '<option value="">Custom application</option>',
+    ...catalog.apps.map((app) => `<option value="${escapeHtml(app.id)}">${escapeHtml(app.name)}</option>`),
   ].join("");
 }
 
 async function loadCatalog() {
-  const catalog = await api("/catalog", { headers: {} });
-  renderCatalog(catalog);
+  renderCatalog(await api("/catalog", { headers: {} }));
+}
+
+function destinationLabel(destination) {
+  const provider = destination.provider.replaceAll("_", " ");
+  return `${destination.name} · ${provider} · ${destination.status.replaceAll("_", " ")}`;
+}
+
+function renderDestinations(destinations) {
+  state.destinations = destinations;
+  const ready = destinations.filter((destination) => destination.readiness.ready).length;
+  elements.destinationCount.textContent = `${ready} ready`;
+  elements.readyDestinationCount.textContent = `${ready} / ${destinations.length}`;
+  elements.destinationSelect.innerHTML = [
+    '<option value="">Select a destination</option>',
+    ...destinations.map((destination) => (
+      `<option value="${destination.id}">${escapeHtml(destinationLabel(destination))}</option>`
+    )),
+  ].join("");
+  elements.destinationList.innerHTML = destinations.map((destination) => `
+    <div class="destination-row">
+      <div>
+        <strong>${escapeHtml(destination.name)}</strong>
+        <span class="meta">${escapeHtml(destination.kind.replaceAll("_", " "))}</span>
+      </div>
+      <span class="${statusClass(destination.status)}">${escapeHtml(destination.status.replaceAll("_", " "))}</span>
+    </div>
+  `).join("");
+}
+
+function renderSelectedDestination() {
+  const destination = state.destinations.find((item) => item.id === Number(elements.destinationSelect.value));
+  if (!destination) {
+    elements.selectedDestinationReadiness.textContent = "Choose a destination to see its readiness.";
+    updateReview();
+    return;
+  }
+  const missing = destination.readiness.missing || [];
+  elements.selectedDestinationReadiness.innerHTML = destination.readiness.ready
+    ? `<strong>Ready</strong><span>This destination can accept application deployments.</span>`
+    : `<strong>Setup required</strong><span>${missing.map(escapeHtml).join(" · ")}</span>`;
+  updateReview();
+}
+
+async function loadDestinations() {
+  if (!state.token) return;
+  renderDestinations(await api("/destinations"));
+}
+
+function renderApplications(applications) {
+  state.applications = applications;
+  elements.applicationCount.textContent = `${applications.length} registered`;
+  if (!applications.length) {
+    elements.applicationList.innerHTML = '<p class="empty-state">No applications registered yet.</p>';
+    return;
+  }
+  elements.applicationList.innerHTML = applications.map((application) => {
+    const source = application.repository_url || application.image || "source pending";
+    const resources = application.resource_requests.length
+      ? application.resource_requests.map((item) => item.replaceAll("_", " ")).join(", ")
+      : "No dependencies requested";
+    return `
+      <article class="application-card">
+        <header>
+          <div>
+            <h3>${escapeHtml(application.name)}</h3>
+            <p class="meta">${escapeHtml(source)}</p>
+          </div>
+          <span class="${statusClass(application.status)}">${escapeHtml(application.status.replaceAll("_", " "))}</span>
+        </header>
+        <dl>
+          <div><dt>Destination</dt><dd>${escapeHtml(application.destination?.name || "unknown")}</dd></div>
+          <div><dt>Environment</dt><dd>${escapeHtml(application.environment)}</dd></div>
+          <div><dt>Resources</dt><dd>${escapeHtml(resources)}</dd></div>
+        </dl>
+        ${application.status === "setup_required"
+          ? '<p class="notice">This application is cataloged, but its destination or resources still require operator setup.</p>'
+          : ""}
+      </article>
+    `;
+  }).join("");
+}
+
+async function loadApplications() {
+  if (!state.token) return;
+  renderApplications(await api("/applications"));
+}
+
+function renderWorkloads(workloads) {
+  state.workloads = workloads;
+  const running = workloads.filter((workload) => workload.status === "running").length;
+  elements.workloadCount.textContent = `${running} running`;
+  if (!workloads.length) {
+    elements.workloadList.innerHTML = '<p class="empty-state">No runtime workloads are connected.</p>';
+    return;
+  }
+  elements.workloadList.innerHTML = workloads.map((workload) => `
+    <div class="workload-row">
+      <div>
+        <strong>${escapeHtml(workload.name)}</strong>
+        <span class="meta">${escapeHtml(workload.image)} · ${escapeHtml(workload.namespace)}</span>
+      </div>
+      <span class="${statusClass(workload.status)}">${escapeHtml(workload.status)}</span>
+      <div class="row-actions">
+        <button class="ghost" type="button" data-action="status" data-id="${workload.id}">Status</button>
+        <button class="ghost" type="button" data-action="logs" data-name="${escapeHtml(workload.name)}" data-namespace="${escapeHtml(workload.namespace)}">Logs</button>
+      </div>
+    </div>
+  `).join("");
+}
+
+async function loadWorkloads() {
+  if (!state.token) return;
+  renderWorkloads(await api("/deployments"));
 }
 
 function applyTemplate(templateId) {
-  const template = state.catalog.apps.find((app) => app.id === templateId);
-  state.selectedTemplate = template || null;
+  const template = state.catalog.apps.find((item) => item.id === templateId);
   if (!template) return;
-  setValue("#appName", template.default_app_name);
-  setValue("#image", template.image);
-  setValue("#imageSelect", template.image);
-  setValue("#port", template.port);
-  setValue("#replicas", template.replicas);
-  setValue("#minReplicas", template.min_replicas);
-  setValue("#maxReplicas", template.max_replicas);
-  setValue("#cpuThreshold", template.cpu_threshold);
+  document.querySelector('input[name="sourceType"][value="container_image"]').checked = true;
+  elements.appName.value = template.default_app_name;
+  elements.image.value = template.image;
+  elements.port.value = template.port;
+  updateSourceFields();
+  updateReview();
 }
 
-function applyImage(imageRef) {
-  const image = state.catalog.images.find((item) => item.image === imageRef);
-  if (!image) return;
-  setValue("#image", image.image);
-  setValue("#port", image.port);
+function updateSourceFields() {
+  const repository = sourceType() === "repository";
+  elements.repositoryField.hidden = !repository;
+  elements.imageField.hidden = repository;
+  elements.repositoryUrl.required = repository;
+  elements.image.required = !repository;
+  updateReview();
 }
 
-function parseEnvVars(value) {
-  return value
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .reduce((acc, line) => {
-      const [key, ...rest] = line.split("=");
-      if (key && rest.length) {
-        acc[key.trim()] = rest.join("=").trim();
-      }
-      return acc;
-    }, {});
+function updateReview() {
+  const destination = state.destinations.find((item) => item.id === Number(elements.destinationSelect.value));
+  const resources = requestedResources();
+  const source = sourceType() === "repository" ? elements.repositoryUrl.value : elements.image.value;
+  elements.applicationReview.innerHTML = `
+    <div><span class="meta">Application</span><strong>${escapeHtml(elements.appName.value || "Not set")}</strong></div>
+    <div><span class="meta">Source</span><strong>${escapeHtml(source || "Not set")}</strong></div>
+    <div><span class="meta">Destination</span><strong>${escapeHtml(destination?.name || "Not selected")}</strong></div>
+    <div><span class="meta">Dependencies</span><strong>${escapeHtml(resources.length ? resources.join(", ") : "None")}</strong></div>
+  `;
 }
 
-function statusClass(status) {
-  return `pill status-${status}`;
+function toggleApplicationForm(show) {
+  elements.applicationForm.hidden = !show;
+  elements.toggleCreateButton.textContent = show ? "Close" : "New application";
+  if (show) updateReview();
 }
 
-function renderApps(apps) {
-  const running = apps.filter((app) => app.status === "running").length;
-  elements.applicationHealth.textContent = `${running} running / ${apps.length} total`;
-  if (!apps.length) {
-    elements.appsList.innerHTML = '<p class="meta">No apps yet. Deploy your first image above.</p>';
-    return;
+async function handleApplicationCreate(event) {
+  event.preventDefault();
+  elements.applicationMessage.textContent = "Registering application...";
+  const payload = {
+    name: elements.appName.value.trim(),
+    source_type: sourceType(),
+    repository_url: elements.repositoryUrl.value.trim() || null,
+    image: elements.image.value.trim() || null,
+    port: Number(elements.port.value),
+    destination_id: Number(elements.destinationSelect.value),
+    environment: elements.environment.value,
+    resource_requests: requestedResources(),
+  };
+  try {
+    const application = await api("/applications", { method: "POST", body: JSON.stringify(payload) });
+    elements.applicationMessage.textContent = `${application.name} is registered as ${application.status.replaceAll("_", " ")}.`;
+    elements.applicationForm.reset();
+    elements.port.value = 80;
+    updateSourceFields();
+    await loadApplications();
+    toggleApplicationForm(false);
+  } catch (error) {
+    elements.applicationMessage.textContent = error.message;
   }
-
-  elements.appsList.innerHTML = apps
-    .map((app) => `
-      <article class="app-card">
-        <header>
-          <div>
-            <h3>${app.name}</h3>
-            <p class="meta">${app.image}</p>
-          </div>
-          <span class="${statusClass(app.status)}">${app.status}</span>
-        </header>
-        <p class="meta">Namespace: ${app.namespace}</p>
-        <p class="meta">Replicas: ${app.replicas} | Port: ${app.port}</p>
-        <p class="meta">URL: ${app.url ? `<a href="${app.url}" target="_blank" rel="noreferrer">${app.url}</a>` : "pending"}</p>
-        ${app.last_error ? `<p class="meta">Error: ${app.last_error}</p>` : ""}
-        <div class="app-actions">
-          <button type="button" data-action="status" data-id="${app.id}">Status</button>
-          <button type="button" data-action="logs" data-name="${app.name}" data-namespace="${app.namespace}">Logs</button>
-          <button class="danger" type="button" data-action="delete" data-id="${app.id}">Delete</button>
-        </div>
-      </article>
-    `)
-    .join("");
-}
-
-async function loadReadiness() {
-  const ready = await api("/readyz", { headers: {} });
-  state.kubernetesDryRun = ready.kubernetes_dry_run;
-  elements.modePill.textContent = ready.kubernetes_dry_run || ready.terraform_dry_run ? "dry-run" : ready.environment;
-  const deployButton = elements.deployForm.querySelector('button[type="submit"]');
-  deployButton.disabled = !state.token || ready.kubernetes_dry_run;
-  if (ready.kubernetes_dry_run && state.token) {
-    elements.deployMessage.textContent = "Kubernetes is in dry-run mode. Provision and connect an EKS cluster first.";
-  }
-}
-
-async function loadSession() {
-  if (!state.token) return;
-  state.currentUser = await api("/auth/me");
-  setSignedIn(true);
-}
-
-function renderInfrastructure(items) {
-  const cluster = items[0];
-  if (!cluster) {
-    elements.clusterStatus.textContent = "not provisioned";
-    return;
-  }
-  elements.clusterStatus.textContent = cluster.status;
-  elements.clusterStatus.className = statusClass(cluster.status);
-  elements.clusterMessage.textContent = cluster.last_error || `${cluster.name} is ${cluster.status}.`;
-}
-
-async function loadInfrastructure() {
-  if (!state.token) {
-    renderInfrastructure([]);
-    return;
-  }
-  renderInfrastructure(await api("/infrastructure"));
-}
-
-async function loadMonitoring() {
-  const ready = await api("/readyz", { headers: {} });
-  elements.apiHealth.textContent = ready.status;
-  if (!state.token) {
-    elements.clusterHealth.textContent = "sign in required";
-    elements.nodeHealth.textContent = "0 / 0";
-    return;
-  }
-  const cluster = await api("/monitoring/cluster/health");
-  elements.clusterHealth.textContent = cluster.status.replaceAll("_", " ");
-  elements.nodeHealth.textContent = `${cluster.ready_nodes || 0} / ${cluster.nodes || 0}`;
-  elements.monitoringMessage.textContent = cluster.mode === "dry-run"
-    ? "No Kubernetes cluster is connected yet."
-    : "";
-}
-
-async function loadApps() {
-  if (!state.token) {
-    renderApps([]);
-    return;
-  }
-  const apps = await api("/deployments");
-  renderApps(apps);
 }
 
 async function handleAuth(event) {
   event.preventDefault();
-  const username = elements.username.value.trim();
-  const password = elements.password.value;
-
   try {
     if (state.mode === "register") {
       await api("/auth/register", {
         method: "POST",
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ username: elements.username.value.trim(), password: elements.password.value }),
       });
-      elements.authMessage.textContent = "Account created. Logging you in...";
     }
-
     const login = await api("/auth/login", {
       method: "POST",
-      body: JSON.stringify({ username, password }),
+      body: JSON.stringify({ username: elements.username.value.trim(), password: elements.password.value }),
     });
     state.token = login.access_token;
     localStorage.setItem("idp_token", state.token);
-    await loadSession();
+    state.currentUser = await api("/auth/me");
     setSignedIn(true);
     elements.authMessage.textContent = "Signed in.";
-    await loadApps();
-    await loadInfrastructure();
+    await Promise.all([loadDestinations(), loadApplications(), loadWorkloads()]);
   } catch (error) {
     elements.authMessage.textContent = error.message;
   }
 }
 
-async function handleDeploy(event) {
-  event.preventDefault();
-  elements.deployMessage.textContent = "Deploying...";
-
-  const payload = {
-    name: document.querySelector("#appName").value.trim(),
-    image: document.querySelector("#image").value.trim(),
-    port: Number(document.querySelector("#port").value),
-    replicas: Number(document.querySelector("#replicas").value),
-    min_replicas: Number(document.querySelector("#minReplicas").value),
-    max_replicas: Number(document.querySelector("#maxReplicas").value),
-    cpu_threshold: Number(document.querySelector("#cpuThreshold").value),
-    env: parseEnvVars(document.querySelector("#envVars").value),
-  };
-
-  if (state.selectedTemplate?.command) {
-    payload.command = state.selectedTemplate.command;
-  }
-
-  if (state.selectedTemplate?.args) {
-    payload.args = state.selectedTemplate.args;
-  }
-
-  const ingressHost = document.querySelector("#ingressHost").value.trim();
-  if (ingressHost) {
-    payload.ingress_host = ingressHost;
-  }
-
-  try {
-    const app = await api("/deployments", {
-      method: "POST",
-      body: JSON.stringify(payload),
-    });
-    elements.deployMessage.textContent = `${app.name} is ${app.status}.`;
-    elements.deployForm.reset();
-    document.querySelector("#port").value = 80;
-    document.querySelector("#replicas").value = 2;
-    document.querySelector("#minReplicas").value = 1;
-    document.querySelector("#maxReplicas").value = 5;
-    document.querySelector("#cpuThreshold").value = 70;
-    elements.templateSelect.value = "";
-    elements.imageSelect.value = "";
-    state.selectedTemplate = null;
-    await loadApps();
-  } catch (error) {
-    elements.deployMessage.textContent = error.message;
-  }
-}
-
-async function handleAppAction(event) {
+async function handleWorkloadAction(event) {
   const button = event.target.closest("button[data-action]");
   if (!button) return;
-
-  const action = button.dataset.action;
   try {
-    if (action === "status") {
-      const app = await api(`/deployments/${button.dataset.id}`);
-      elements.logsTarget.textContent = app.name;
-      elements.logsOutput.textContent = JSON.stringify(app, null, 2);
-    }
-
-    if (action === "logs") {
+    if (button.dataset.action === "status") {
+      const workload = await api(`/deployments/${button.dataset.id}`);
+      elements.logsTarget.textContent = workload.name;
+      elements.logsOutput.textContent = JSON.stringify(workload, null, 2);
+    } else {
       elements.logsTarget.textContent = `${button.dataset.namespace}/${button.dataset.name}`;
-      const logs = await api(
+      const result = await api(
         `/monitoring/logs/${encodeURIComponent(button.dataset.name)}?namespace=${encodeURIComponent(button.dataset.namespace)}`
       );
-      elements.logsOutput.textContent = logs.logs;
-    }
-
-    if (action === "delete") {
-      await api(`/deployments/${button.dataset.id}`, { method: "DELETE" });
-      await loadApps();
+      elements.logsOutput.textContent = result.logs;
     }
   } catch (error) {
     elements.logsOutput.textContent = error.message;
   }
 }
 
+async function loadApiHealth() {
+  try {
+    const readiness = await api("/readyz", { headers: {} });
+    elements.apiHealth.textContent = readiness.status;
+  } catch {
+    elements.apiHealth.textContent = "not ready";
+  }
+}
+
 elements.loginTab.addEventListener("click", () => setMode("login"));
 elements.registerTab.addEventListener("click", () => setMode("register"));
 elements.authForm.addEventListener("submit", handleAuth);
-elements.monitoringRefreshButton.addEventListener("click", () => loadMonitoring().catch(() => {}));
-elements.deployForm.addEventListener("submit", handleDeploy);
-elements.templateSelect.addEventListener("change", (event) => applyTemplate(event.target.value));
-elements.imageSelect.addEventListener("change", (event) => applyImage(event.target.value));
-elements.refreshButton.addEventListener("click", loadApps);
-elements.appsList.addEventListener("click", handleAppAction);
 elements.logoutButton.addEventListener("click", () => {
   state.token = "";
   state.currentUser = null;
   localStorage.removeItem("idp_token");
   setSignedIn(false);
-  renderInfrastructure([]);
-  renderApps([]);
+  renderApplications([]);
+  renderDestinations([]);
+  renderWorkloads([]);
 });
+elements.toggleCreateButton.addEventListener("click", () => toggleApplicationForm(elements.applicationForm.hidden));
+elements.cancelCreateButton.addEventListener("click", () => toggleApplicationForm(false));
+elements.applicationForm.addEventListener("submit", handleApplicationCreate);
+elements.templateSelect.addEventListener("change", (event) => applyTemplate(event.target.value));
+elements.destinationSelect.addEventListener("change", renderSelectedDestination);
+elements.applicationForm.addEventListener("input", updateReview);
+document.querySelectorAll('input[name="sourceType"]').forEach((input) => input.addEventListener("change", updateSourceFields));
+elements.refreshButton.addEventListener("click", () => Promise.all([loadApplications(), loadDestinations(), loadWorkloads()]));
+elements.workloadList.addEventListener("click", handleWorkloadAction);
 
 setSignedIn(Boolean(state.token));
-loadSession().catch(() => {
-  state.token = "";
-  state.currentUser = null;
-  localStorage.removeItem("idp_token");
-  setSignedIn(false);
-});
 loadCatalog().catch(() => {});
-loadReadiness().catch(() => {});
-loadInfrastructure().catch(() => {});
-loadMonitoring().catch(() => {});
-loadApps().catch((error) => {
-  elements.appsList.innerHTML = `<p class="meta">${error.message}</p>`;
-});
-setInterval(() => {
-  if (state.token) {
-    loadInfrastructure().catch(() => {});
-    loadMonitoring().catch(() => {});
-  }
-}, 10000);
+loadApiHealth();
+if (state.token) {
+  api("/auth/me")
+    .then((user) => {
+      state.currentUser = user;
+      setSignedIn(true);
+      return Promise.all([loadDestinations(), loadApplications(), loadWorkloads()]);
+    })
+    .catch(() => {
+      state.token = "";
+      localStorage.removeItem("idp_token");
+      setSignedIn(false);
+    });
+}
