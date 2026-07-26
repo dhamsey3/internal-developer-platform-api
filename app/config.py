@@ -24,6 +24,12 @@ class Settings(BaseSettings):
     DEFAULT_DESTINATION_URL: str = Field(default="", env="DEFAULT_DESTINATION_URL")
     DEFAULT_RUNNER_LABEL: str = Field(default="idp-vm", env="DEFAULT_RUNNER_LABEL")
     DEFAULT_DESTINATION_ENABLED: bool = Field(default=True, env="DEFAULT_DESTINATION_ENABLED")
+    GITHUB_REPOSITORY: str = Field(
+        default="dhamsey3/internal-developer-platform-api",
+        env="GITHUB_REPOSITORY",
+    )
+    GITHUB_DISPATCH_TOKEN: str = Field(default="", env="GITHUB_DISPATCH_TOKEN")
+    DEPLOYMENT_CALLBACK_TOKEN: str = Field(default="", env="DEPLOYMENT_CALLBACK_TOKEN")
     KUBERNETES_NAMESPACE_PREFIX: str = Field(default="tenant", env="KUBERNETES_NAMESPACE_PREFIX")
     KUBERNETES_DRY_RUN: bool = Field(default=False, env="KUBERNETES_DRY_RUN")
     TERRAFORM_DRY_RUN: bool = Field(default=True, env="TERRAFORM_DRY_RUN")
