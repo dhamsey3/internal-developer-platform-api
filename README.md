@@ -132,7 +132,32 @@ open http://127.0.0.1:8000/docs
 
 ## Architecture
 
-The API receives authenticated platform requests, validates input, stores metadata in the database, and orchestrates Kubernetes or Terraform operations through service-layer modules.
+The platform is a developer hub that connects applications, dependencies, deployment destinations, and operational systems. GitHub remains the source and pipeline system; Docker, Kubernetes, and cloud providers remain runtime sources of truth. The IDP stores ownership, desired configuration, readiness, and deployment history.
+
+### Core Model
+
+```text
+Application
+├── Source: repository or container image
+├── Resources: database, cache, storage, queue, secrets
+├── Destination: local, existing server, cloud, or Kubernetes
+├── Deployments: version and runtime status
+└── Operations: health, logs, metrics, and rollback
+```
+
+The dashboard guides developers through source, dependencies, destination, and review. Provider details such as IAM roles, Terraform state, kubeconfigs, and networking remain operator concerns.
+
+### Destination Readiness
+
+Destinations are registered before developers use them. Each destination adapter reports explicit readiness checks and missing setup:
+
+- `linux_docker`: enabled server, dedicated runner label, and application deployment workflow
+- `local_docker`: local platform agent
+- `aws_ecs`: AWS account connected through GitHub OIDC
+- `existing_kubernetes`: scoped Kubernetes deployment identity
+- Azure and Google Cloud adapters can be added behind the same contract
+
+The initial `home-vm`, `local-docker`, and `aws-sandbox` destinations are catalog entries. They remain `setup_required` until their actual application delivery prerequisites are configured. The platform never marks an application as deployed merely because its metadata was registered.
 
 ### Request Flow for Application Deployment
 
@@ -142,6 +167,8 @@ The API receives authenticated platform requests, validates input, stores metada
 4. Kubernetes service layer creates namespace, Deployment, Service, Ingress, and HPA
 5. Deployment status, URL, autoscaling settings, and errors are persisted
 6. Users query deployment status, logs, metrics, and cluster health through API endpoints
+
+The existing `/deployments` Kubernetes API remains available as a compatibility path and is displayed under **Operations**. New provider-neutral application records use `/applications`; configured execution adapters will create deployment records in later phases.
 
 ---
 
