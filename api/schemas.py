@@ -88,6 +88,12 @@ class ApplicationResponse(BaseModel):
         orm_mode = True
 
 
+class ApplicationDeploymentCallback(BaseModel):
+    status: str = Field(..., regex=r"^(deploying|running|failed)$")
+    url: Optional[str] = Field(default=None, max_length=500)
+    error: Optional[str] = Field(default=None, max_length=2000)
+
+
 class InfrastructureCreateRequest(BaseModel):
     name: str = Field(..., min_length=3, max_length=63, regex=r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$")
     cloud_provider: str = Field(default="aws", regex=r"^aws$")
