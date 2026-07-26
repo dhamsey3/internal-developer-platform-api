@@ -421,6 +421,10 @@ label {
   font-size: 16px;
 }
 
+.application-card a {
+  color: var(--primary-dark);
+}
+
 .application-card dl {
   display: grid;
   gap: 8px;
