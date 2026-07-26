@@ -44,7 +44,7 @@ jobs:
       IDP_API_URL: ${{ vars.IDP_API_URL }}
       APPLICATION_BASE_URL: ${{ vars.APPLICATION_BASE_URL }}
       APPLICATION_BIND_ADDRESS: ${{ vars.APPLICATION_BIND_ADDRESS || '127.0.0.1' }}
-      CALLBACK_TOKEN: ${{ secrets.IDP_CALLBACK_TOKEN }}
+      CALLBACK_TOKEN: ${{ secrets.DEPLOYMENT_CALLBACK_TOKEN }}
     steps:
       - name: Validate deployment request
         run: |
