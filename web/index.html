@@ -9,164 +9,201 @@
   <body>
     <header class="topbar">
       <div>
-        <p class="eyebrow">AWS-first platform engineering</p>
+        <p class="eyebrow">Developer workspace</p>
         <h1>Internal Developer Platform</h1>
       </div>
+      <nav class="topnav" aria-label="Primary">
+        <a class="active" href="#applications">Applications</a>
+        <a href="#destinations">Destinations</a>
+        <a href="#operations">Operations</a>
+      </nav>
       <div class="session">
         <span id="sessionStatus">Signed out</span>
         <button id="logoutButton" class="ghost" type="button">Sign out</button>
       </div>
     </header>
 
-    <main class="layout">
-      <section class="panel auth-panel">
-        <div class="panel-heading">
-          <h2>Access</h2>
-          <span class="pill">JWT</span>
-        </div>
-        <div class="tabs" role="tablist">
-          <button id="loginTab" class="tab active" type="button">Login</button>
-          <button id="registerTab" class="tab" type="button">Register</button>
-        </div>
-        <form id="authForm" class="form">
-          <label>
-            Username
-            <input
-              id="username"
-              name="username"
-              autocomplete="username"
-              required
-              minlength="3"
-              maxlength="64"
-              pattern="[A-Za-z0-9_.-]+"
-              title="Use letters, numbers, dots, underscores, or hyphens."
-              placeholder="platform-admin"
-            />
-          </label>
-          <label>
-            Password
-            <input id="password" name="password" type="password" autocomplete="current-password" required minlength="8" />
-          </label>
-          <button id="authSubmit" type="submit">Login</button>
-        </form>
-        <p id="authMessage" class="message"></p>
-      </section>
+    <main class="shell">
+      <aside class="sidebar">
+        <section class="sidebar-section auth-panel">
+          <div class="section-heading">
+            <h2>Access</h2>
+            <span class="pill">JWT</span>
+          </div>
+          <div class="tabs" role="tablist">
+            <button id="loginTab" class="tab active" type="button">Login</button>
+            <button id="registerTab" class="tab" type="button">Register</button>
+          </div>
+          <form id="authForm" class="form">
+            <label>
+              Username
+              <input id="username" autocomplete="username" required minlength="3" maxlength="64" pattern="[A-Za-z0-9_.-]+" />
+            </label>
+            <label>
+              Password
+              <input id="password" type="password" autocomplete="current-password" required minlength="8" />
+            </label>
+            <button id="authSubmit" type="submit">Login</button>
+          </form>
+          <p id="authMessage" class="message"></p>
+        </section>
 
-      <section class="panel cluster-panel">
-        <div class="panel-heading">
-          <h2>AWS Cluster</h2>
-          <span id="clusterStatus" class="pill">not provisioned</span>
-        </div>
-        <p class="message">AWS changes use temporary credentials and require approval in GitHub Actions.</p>
-        <a
-          class="button-link"
-          href="https://github.com/dhamsey3/internal-developer-platform-api/actions/workflows/aws-infrastructure.yaml"
-          target="_blank"
-          rel="noopener noreferrer"
-        >Open AWS workflow</a>
-        <p id="clusterMessage" class="message"></p>
-      </section>
+        <section id="destinations" class="sidebar-section">
+          <div class="section-heading">
+            <h2>Destinations</h2>
+            <span id="destinationCount" class="pill">0 ready</span>
+          </div>
+          <div id="destinationList" class="destination-list">
+            <p class="meta">Sign in to check destinations.</p>
+          </div>
+          <a
+            class="text-link"
+            href="https://github.com/dhamsey3/internal-developer-platform-api/actions/workflows/aws-infrastructure.yaml"
+            target="_blank"
+            rel="noopener noreferrer"
+          >Platform operator workflow</a>
+        </section>
+      </aside>
 
-      <section class="panel deploy-panel">
-        <div class="panel-heading">
-          <h2>Create App</h2>
-          <span id="modePill" class="pill">dry-run</span>
-        </div>
-        <form id="deployForm" class="form grid-form">
-          <label>
-            App template
-            <select id="templateSelect">
-              <option value="">Custom app</option>
-            </select>
-          </label>
-          <label>
-            Image catalog
-            <select id="imageSelect">
-              <option value="">Custom image</option>
-            </select>
-          </label>
-          <label>
-            App name
-            <input id="appName" required minlength="3" pattern="[a-z0-9]([-a-z0-9]*[a-z0-9])?" placeholder="orders-api" />
-          </label>
-          <label>
-            Docker image
-            <input id="image" required placeholder="nginx:1.25" />
-          </label>
-          <label>
-            Port
-            <input id="port" type="number" min="1" max="65535" value="80" required />
-          </label>
-          <label>
-            Replicas
-            <input id="replicas" type="number" min="1" max="20" value="2" required />
-          </label>
-          <label>
-            Min replicas
-            <input id="minReplicas" type="number" min="1" max="20" value="1" required />
-          </label>
-          <label>
-            Max replicas
-            <input id="maxReplicas" type="number" min="1" max="100" value="5" required />
-          </label>
-          <label>
-            CPU threshold
-            <input id="cpuThreshold" type="number" min="10" max="95" value="70" required />
-          </label>
-          <label>
-            Ingress host
-            <input id="ingressHost" placeholder="optional" />
-          </label>
-          <label class="wide">
-            Environment variables
-            <textarea id="envVars" rows="4" placeholder="DATABASE_URL=postgres://...&#10;REDIS_URL=redis://..."></textarea>
-          </label>
-          <button type="submit">Deploy Image</button>
-        </form>
-        <p id="deployMessage" class="message"></p>
-      </section>
-
-      <section class="panel monitoring-panel">
-        <div class="panel-heading">
-          <h2>Monitoring</h2>
-          <button id="monitoringRefreshButton" class="ghost" type="button">Refresh</button>
-        </div>
-        <div class="monitoring-grid">
-          <div class="monitor-item">
+      <div class="workspace">
+        <section class="summary-strip" aria-label="Platform summary">
+          <div>
             <span class="meta">IDP API</span>
             <strong id="apiHealth">checking</strong>
           </div>
-          <div class="monitor-item">
-            <span class="meta">Kubernetes</span>
-            <strong id="clusterHealth">checking</strong>
-          </div>
-          <div class="monitor-item">
-            <span class="meta">Ready nodes</span>
-            <strong id="nodeHealth">0 / 0</strong>
-          </div>
-          <div class="monitor-item">
+          <div>
             <span class="meta">Applications</span>
-            <strong id="applicationHealth">0 running</strong>
+            <strong id="applicationCount">0 registered</strong>
           </div>
-        </div>
-        <p id="monitoringMessage" class="message"></p>
-      </section>
+          <div>
+            <span class="meta">Ready destinations</span>
+            <strong id="readyDestinationCount">0 / 0</strong>
+          </div>
+          <div>
+            <span class="meta">Runtime workloads</span>
+            <strong id="workloadCount">0 running</strong>
+          </div>
+        </section>
 
-      <section class="panel apps-panel">
-        <div class="panel-heading">
-          <h2>Apps</h2>
-          <button id="refreshButton" class="ghost" type="button">Refresh</button>
-        </div>
-        <div id="appsList" class="apps-list"></div>
-      </section>
+        <section id="applications" class="workspace-section">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Application catalog</p>
+              <h2>Applications</h2>
+            </div>
+            <button id="toggleCreateButton" type="button">New application</button>
+          </div>
 
-      <section class="panel logs-panel">
-        <div class="panel-heading">
-          <h2>Logs</h2>
-          <span id="logsTarget" class="pill">select app</span>
-        </div>
-        <pre id="logsOutput">Choose an app and click Logs.</pre>
-      </section>
+          <form id="applicationForm" class="application-flow" hidden>
+            <div class="flow-step">
+              <div class="step-number">1</div>
+              <div class="step-content">
+                <h3>Source</h3>
+                <div class="segmented" role="radiogroup" aria-label="Source type">
+                  <label><input type="radio" name="sourceType" value="container_image" checked /> Container image</label>
+                  <label><input type="radio" name="sourceType" value="repository" /> Git repository</label>
+                </div>
+                <div class="form-grid">
+                  <label>
+                    Template
+                    <select id="templateSelect">
+                      <option value="">Custom application</option>
+                    </select>
+                  </label>
+                  <label>
+                    Application name
+                    <input id="appName" required minlength="3" maxlength="63" pattern="[a-z0-9]([-a-z0-9]*[a-z0-9])?" placeholder="orders-api" />
+                  </label>
+                  <label id="imageField">
+                    Container image
+                    <input id="image" placeholder="ghcr.io/team/orders-api:1.0.0" />
+                  </label>
+                  <label id="repositoryField" hidden>
+                    Repository URL
+                    <input id="repositoryUrl" type="url" placeholder="https://github.com/team/orders-api" />
+                  </label>
+                  <label>
+                    Application port
+                    <input id="port" type="number" min="1" max="65535" value="80" required />
+                  </label>
+                  <label>
+                    Environment
+                    <select id="environment">
+                      <option value="development">Development</option>
+                      <option value="staging">Staging</option>
+                      <option value="production">Production</option>
+                    </select>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <div class="flow-step">
+              <div class="step-number">2</div>
+              <div class="step-content">
+                <h3>Dependencies</h3>
+                <div class="resource-options">
+                  <label><input type="checkbox" name="resource" value="postgresql" /> PostgreSQL</label>
+                  <label><input type="checkbox" name="resource" value="redis" /> Redis</label>
+                  <label><input type="checkbox" name="resource" value="object_storage" /> Object storage</label>
+                  <label><input type="checkbox" name="resource" value="queue" /> Queue</label>
+                  <label><input type="checkbox" name="resource" value="secrets" /> Secrets</label>
+                </div>
+                <p class="meta">Requests are recorded now; provisioning adapters are enabled destination by destination.</p>
+              </div>
+            </div>
+
+            <div class="flow-step">
+              <div class="step-number">3</div>
+              <div class="step-content">
+                <h3>Destination</h3>
+                <label>
+                  Where should this run?
+                  <select id="destinationSelect" required>
+                    <option value="">Select a destination</option>
+                  </select>
+                </label>
+                <div id="selectedDestinationReadiness" class="readiness-box">Choose a destination to see its readiness.</div>
+              </div>
+            </div>
+
+            <div class="flow-step review-step">
+              <div class="step-number">4</div>
+              <div class="step-content">
+                <h3>Review</h3>
+                <div id="applicationReview" class="review-grid"></div>
+                <div class="form-actions">
+                  <button id="cancelCreateButton" class="ghost" type="button">Cancel</button>
+                  <button type="submit">Register application</button>
+                </div>
+                <p id="applicationMessage" class="message"></p>
+              </div>
+            </div>
+          </form>
+
+          <div id="applicationList" class="application-list">
+            <p class="meta">Sign in to view applications.</p>
+          </div>
+        </section>
+
+        <section id="operations" class="workspace-section">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Existing runtime</p>
+              <h2>Operations</h2>
+            </div>
+            <button id="refreshButton" class="ghost" type="button">Refresh</button>
+          </div>
+          <div id="workloadList" class="workload-list"></div>
+          <div class="log-viewer">
+            <div class="section-heading">
+              <h3>Logs and status</h3>
+              <span id="logsTarget" class="pill">select workload</span>
+            </div>
+            <pre id="logsOutput">Select a runtime workload to inspect it.</pre>
+          </div>
+        </section>
+      </div>
     </main>
 
     <script src="/dashboard/app.js"></script>
