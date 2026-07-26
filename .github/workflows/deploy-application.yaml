@@ -1,0 +1,174 @@
+name: Deploy Application
+
+on:
+  workflow_dispatch:
+    inputs:
+      application_id:
+        required: true
+        type: string
+      name:
+        required: true
+        type: string
+      image:
+        required: true
+        type: string
+      port:
+        required: true
+        type: string
+      host_port:
+        required: true
+        type: string
+      resources:
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: application-${{ inputs.application_id }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy application to home VM
+    runs-on: [self-hosted, linux, idp-vm]
+    timeout-minutes: 20
+    env:
+      APPLICATION_ID: ${{ inputs.application_id }}
+      APPLICATION_NAME: ${{ inputs.name }}
+      APPLICATION_IMAGE: ${{ inputs.image }}
+      CONTAINER_PORT: ${{ inputs.port }}
+      HOST_PORT: ${{ inputs.host_port }}
+      REQUESTED_RESOURCES: ${{ inputs.resources }}
+      IDP_API_URL: ${{ vars.IDP_API_URL }}
+      APPLICATION_BASE_URL: ${{ vars.APPLICATION_BASE_URL }}
+      APPLICATION_BIND_ADDRESS: ${{ vars.APPLICATION_BIND_ADDRESS || '127.0.0.1' }}
+      CALLBACK_TOKEN: ${{ secrets.IDP_CALLBACK_TOKEN }}
+    steps:
+      - name: Validate deployment request
+        run: |
+          [[ "$APPLICATION_ID" =~ ^[0-9]+$ ]]
+          [[ "$APPLICATION_NAME" =~ ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$ ]]
+          [[ "$APPLICATION_IMAGE" =~ ^[A-Za-z0-9./:@_-]+$ ]]
+          [[ "$CONTAINER_PORT" =~ ^[0-9]+$ ]] && (( CONTAINER_PORT >= 1 && CONTAINER_PORT <= 65535 ))
+          [[ "$HOST_PORT" =~ ^[0-9]+$ ]] && (( HOST_PORT >= 10000 && HOST_PORT <= 65535 ))
+          [[ "$APPLICATION_BIND_ADDRESS" =~ ^[0-9.]+$ ]]
+          test -n "$IDP_API_URL"
+          test -n "$CALLBACK_TOKEN"
+
+      - name: Report deployment started
+        run: |
+          curl --fail --silent --show-error \
+            -X POST "$IDP_API_URL/applications/$APPLICATION_ID/deployment-callback" \
+            -H "Content-Type: application/json" \
+            -H "X-Deployment-Token: $CALLBACK_TOKEN" \
+            -d '{"status":"deploying"}'
+
+      - name: Prepare destination and resources
+        run: |
+          docker network inspect idp-apps >/dev/null 2>&1 || docker network create idp-apps
+          secret_dir="$HOME/.idp/applications/$APPLICATION_ID"
+          mkdir -p "$secret_dir"
+          chmod 700 "$HOME/.idp" "$HOME/.idp/applications" "$secret_dir"
+          touch "$secret_dir/app.env"
+          chmod 600 "$secret_dir/app.env"
+
+          if [[ ",$REQUESTED_RESOURCES," == *",postgresql,"* ]]; then
+            if [ ! -s "$secret_dir/postgres.env" ]; then
+              password=$(openssl rand -hex 24)
+              {
+                printf 'POSTGRES_USER=idp_app\n'
+                printf 'POSTGRES_DB=app\n'
+                printf 'POSTGRES_PASSWORD=%s\n' "$password"
+              } > "$secret_dir/postgres.env"
+              printf 'DATABASE_URL=postgresql://idp_app:%s@idp-db-%s:5432/app\n' \
+                "$password" "$APPLICATION_ID" >> "$secret_dir/app.env"
+              chmod 600 "$secret_dir/postgres.env" "$secret_dir/app.env"
+            fi
+
+            if ! docker container inspect "idp-db-$APPLICATION_ID" >/dev/null 2>&1; then
+              docker run -d \
+                --name "idp-db-$APPLICATION_ID" \
+                --restart unless-stopped \
+                --network idp-apps \
+                --env-file "$secret_dir/postgres.env" \
+                --volume "idp-db-$APPLICATION_ID:/var/lib/postgresql/data" \
+                postgres:16-alpine
+            else
+              docker start "idp-db-$APPLICATION_ID" >/dev/null
+            fi
+
+            for attempt in {1..30}; do
+              if docker exec "idp-db-$APPLICATION_ID" pg_isready -U idp_app -d app >/dev/null 2>&1; then
+                break
+              fi
+              if [ "$attempt" -eq 30 ]; then
+                echo "PostgreSQL did not become ready"
+                exit 1
+              fi
+              sleep 2
+            done
+          fi
+
+      - name: Deploy container with rollback
+        run: |
+          container_name="idp-app-$APPLICATION_ID-$APPLICATION_NAME"
+          secret_file="$HOME/.idp/applications/$APPLICATION_ID/app.env"
+          previous_image=$(docker inspect --format '{{.Config.Image}}' "$container_name" 2>/dev/null || true)
+          docker stop "$container_name" >/dev/null 2>&1 || true
+          docker rm "$container_name" >/dev/null 2>&1 || true
+
+          run_application() {
+            image="$1"
+            docker run -d \
+              --name "$container_name" \
+              --restart unless-stopped \
+              --network idp-apps \
+              --env-file "$secret_file" \
+              --label "idp.application-id=$APPLICATION_ID" \
+              --label "idp.application-name=$APPLICATION_NAME" \
+              -p "$APPLICATION_BIND_ADDRESS:$HOST_PORT:$CONTAINER_PORT" \
+              "$image"
+          }
+
+          run_application "$APPLICATION_IMAGE"
+          health_host="$APPLICATION_BIND_ADDRESS"
+          if [ "$health_host" = "0.0.0.0" ]; then
+            health_host="127.0.0.1"
+          fi
+          for attempt in {1..20}; do
+            if curl --fail --silent "http://$health_host:$HOST_PORT/" >/dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+
+          docker logs --tail 100 "$container_name" || true
+          docker rm --force "$container_name" >/dev/null 2>&1 || true
+          if [ -n "$previous_image" ]; then
+            run_application "$previous_image"
+          fi
+          exit 1
+
+      - name: Report deployment success
+        run: |
+          application_url=""
+          if [ -n "$APPLICATION_BASE_URL" ]; then
+            application_url="${APPLICATION_BASE_URL%/}:$HOST_PORT"
+          fi
+          payload=$(printf '{"status":"running","url":"%s"}' "$application_url")
+          curl --fail --silent --show-error \
+            -X POST "$IDP_API_URL/applications/$APPLICATION_ID/deployment-callback" \
+            -H "Content-Type: application/json" \
+            -H "X-Deployment-Token: $CALLBACK_TOKEN" \
+            -d "$payload"
+
+      - name: Report deployment failure
+        if: failure()
+        run: |
+          curl --fail --silent --show-error \
+            -X POST "$IDP_API_URL/applications/$APPLICATION_ID/deployment-callback" \
+            -H "Content-Type: application/json" \
+            -H "X-Deployment-Token: $CALLBACK_TOKEN" \
+            -d '{"status":"failed","error":"The VM deployment workflow failed. Review the GitHub Actions log."}'
