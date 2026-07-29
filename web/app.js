@@ -6,6 +6,8 @@ const state = {
   destinations: [],
   applications: [],
   workloads: [],
+  deploymentPollTimer: null,
+  refreshInFlight: false,
 };
 
 const elements = Object.fromEntries(
@@ -189,6 +191,19 @@ function renderApplications(applications) {
   }).join("");
 }
 
+function scheduleDeploymentPoll() {
+  if (state.deploymentPollTimer) {
+    window.clearTimeout(state.deploymentPollTimer);
+    state.deploymentPollTimer = null;
+  }
+  const deploymentActive = state.applications.some((application) =>
+    ["queued", "deploying"].includes(application.status)
+  );
+  if (!state.token || !deploymentActive) return;
+  elements.refreshStatus.textContent = "Watching deployment";
+  state.deploymentPollTimer = window.setTimeout(() => refreshDashboard(false), 5000);
+}
+
 async function loadApplications() {
   if (!state.token) return;
   renderApplications(await api("/applications"));
@@ -305,6 +320,7 @@ async function handleAuth(event) {
     setSignedIn(true);
     elements.authMessage.textContent = "Signed in.";
     await Promise.all([loadDestinations(), loadApplications(), loadWorkloads()]);
+    scheduleDeploymentPoll();
   } catch (error) {
     elements.authMessage.textContent = error.message;
   }
@@ -338,6 +354,7 @@ async function handleApplicationAction(event) {
   try {
     await api(`/applications/${button.dataset.id}/deploy`, { method: "POST" });
     await loadApplications();
+    scheduleDeploymentPoll();
   } catch (error) {
     elements.applicationMessage.textContent = error.message;
     button.disabled = false;
@@ -354,34 +371,46 @@ async function loadApiHealth() {
   }
 }
 
-async function handleRefresh() {
-  if (!state.token) return;
-  elements.refreshButton.disabled = true;
-  elements.refreshButton.textContent = "Refreshing...";
-  elements.refreshStatus.textContent = "";
-  const results = await Promise.allSettled([
-    loadApplications(),
-    loadDestinations(),
-    loadWorkloads(),
-    loadApiHealth(),
-  ]);
-  const failures = results.filter((result) => result.status === "rejected");
-  elements.refreshStatus.textContent = failures.length
-    ? `Updated with ${failures.length} error${failures.length === 1 ? "" : "s"}`
-    : "Up to date";
-  if (failures.length) {
-    elements.logsOutput.textContent = failures
-      .map((result) => result.reason?.message || "Refresh request failed")
-      .join("\n");
+async function refreshDashboard(announce = true) {
+  if (!state.token || state.refreshInFlight) return;
+  state.refreshInFlight = true;
+  if (announce) {
+    elements.refreshButton.disabled = true;
+    elements.refreshButton.textContent = "Refreshing...";
+    elements.refreshStatus.textContent = "";
   }
-  elements.refreshButton.textContent = "Refresh";
-  elements.refreshButton.disabled = false;
+  try {
+    const results = await Promise.allSettled([
+      loadApplications(),
+      loadDestinations(),
+      loadWorkloads(),
+      loadApiHealth(),
+    ]);
+    const failures = results.filter((result) => result.status === "rejected");
+    elements.refreshStatus.textContent = failures.length
+      ? `Updated with ${failures.length} error${failures.length === 1 ? "" : "s"}`
+      : `Updated ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
+    if (failures.length) {
+      elements.logsOutput.textContent = failures
+        .map((result) => result.reason?.message || "Refresh request failed")
+        .join("\n");
+    }
+  } finally {
+    state.refreshInFlight = false;
+    if (announce) {
+      elements.refreshButton.textContent = "Refresh";
+      elements.refreshButton.disabled = false;
+    }
+    scheduleDeploymentPoll();
+  }
 }
 
 elements.loginTab.addEventListener("click", () => setMode("login"));
 elements.registerTab.addEventListener("click", () => setMode("register"));
 elements.authForm.addEventListener("submit", handleAuth);
 elements.logoutButton.addEventListener("click", () => {
+  if (state.deploymentPollTimer) window.clearTimeout(state.deploymentPollTimer);
+  state.deploymentPollTimer = null;
   state.token = "";
   state.currentUser = null;
   localStorage.removeItem("idp_token");
@@ -397,7 +426,7 @@ elements.templateSelect.addEventListener("change", (event) => applyTemplate(even
 elements.destinationSelect.addEventListener("change", renderSelectedDestination);
 elements.applicationForm.addEventListener("input", updateReview);
 document.querySelectorAll('input[name="sourceType"]').forEach((input) => input.addEventListener("change", updateSourceFields));
-elements.refreshButton.addEventListener("click", handleRefresh);
+elements.refreshButton.addEventListener("click", () => refreshDashboard());
 elements.workloadList.addEventListener("click", handleWorkloadAction);
 elements.applicationList.addEventListener("click", handleApplicationAction);
 
@@ -409,7 +438,8 @@ if (state.token) {
     .then((user) => {
       state.currentUser = user;
       setSignedIn(true);
-      return Promise.all([loadDestinations(), loadApplications(), loadWorkloads()]);
+      return Promise.all([loadDestinations(), loadApplications(), loadWorkloads()])
+        .then(scheduleDeploymentPoll);
     })
     .catch(() => {
       state.token = "";
