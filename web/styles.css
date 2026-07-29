@@ -511,6 +511,8 @@ pre {
 
 .status-setup_required,
 .status-provisioning,
+.status-queued,
+.status-deploying,
 .status-not_configured {
   background: #fffaeb;
   color: var(--warn);
