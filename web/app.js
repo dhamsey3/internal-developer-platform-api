@@ -6,6 +6,11 @@ const state = {
   destinations: [],
   applications: [],
   workloads: [],
+  systemReadiness: {
+    dispatch_token_present: false,
+    callback_token_present: false,
+    preview_routing_configured: false,
+  },
   deploymentPollTimer: null,
   sandboxPollTimer: null,
   sandboxCountdownTimer: null,
@@ -25,7 +30,7 @@ const elements = Object.fromEntries(
     "applicationReview", "applicationMessage", "cancelCreateButton", "applicationList",
     "refreshButton", "refreshStatus", "workloadList", "logsTarget", "logsOutput",
     "sandboxTemplate", "sandboxLaunchButton", "sandboxStatus", "sandboxDeploymentId",
-    "sandboxCountdown", "sandboxPort", "sandboxOpenLink", "sandboxMessage",
+    "sandboxCountdown", "sandboxPort", "sandboxOpenLink", "sandboxMessage", "sourceRepositoryOption",
   ].map((id) => [id, document.querySelector(`#${id}`)])
 );
 
@@ -129,7 +134,7 @@ function renderSandbox(deployment) {
   const hostPort = sandboxHostPort(effectiveDeployment);
   elements.sandboxPort.textContent = hostPort || "Pending";
 
-  if (status === "running" && effectiveDeployment?.url) {
+  if (status === "running" && state.systemReadiness.preview_routing_configured && effectiveDeployment?.url) {
     elements.sandboxOpenLink.href = effectiveDeployment.url;
     elements.sandboxOpenLink.hidden = false;
   } else {
@@ -140,8 +145,8 @@ function renderSandbox(deployment) {
   elements.sandboxLaunchButton.disabled = status === "queued";
   if (effectiveDeployment?.last_error) {
     elements.sandboxMessage.textContent = effectiveDeployment.last_error;
-  } else if (status === "running" && !effectiveDeployment?.url) {
-    elements.sandboxMessage.textContent = "Sandbox is running, but no public preview URL is configured for this VM.";
+  } else if (status === "running" && !state.systemReadiness.preview_routing_configured) {
+    elements.sandboxMessage.textContent = `Runtime Created (Port :${hostPort}). Preview routing is not configured.`;
   } else if (status === "expired") {
     elements.sandboxMessage.textContent = "Sandbox expired and the preview container was removed.";
   }
@@ -239,9 +244,13 @@ function requestedResources() {
 function renderCatalog(catalog) {
   state.catalog = catalog;
   elements.templateSelect.innerHTML = [
-    '<option value="">Custom application</option>',
+    '<option value="" disabled>Choose an allowlisted template</option>',
     ...catalog.apps.map((app) => `<option value="${escapeHtml(app.id)}">${escapeHtml(app.name)}</option>`),
   ].join("");
+  if (catalog.apps.length) {
+    elements.templateSelect.value = catalog.apps[0].id;
+    applyTemplate(catalog.apps[0].id);
+  }
 }
 
 async function loadCatalog() {
@@ -423,10 +432,14 @@ function applyTemplate(templateId) {
 
 function updateSourceFields() {
   const repository = sourceType() === "repository";
-  elements.repositoryField.hidden = !repository;
-  elements.imageField.hidden = repository;
-  elements.repositoryUrl.required = repository;
-  elements.image.required = !repository;
+  if (repository) {
+    document.querySelector('input[name="sourceType"][value="container_image"]').checked = true;
+  }
+  elements.repositoryField.hidden = true;
+  elements.imageField.hidden = false;
+  elements.repositoryUrl.required = false;
+  elements.image.required = true;
+  elements.image.readOnly = true;
   updateReview();
 }
 
@@ -550,6 +563,22 @@ async function loadApiHealth() {
   }
 }
 
+async function loadSystemReadiness() {
+  try {
+    state.systemReadiness = await api("/system/readiness", { headers: {} });
+    elements.sandboxLaunchButton.disabled = !(
+      state.systemReadiness.dispatch_token_present && state.systemReadiness.callback_token_present
+    );
+    if (state.sandboxDeployment) renderSandbox(state.sandboxDeployment);
+  } catch {
+    state.systemReadiness = {
+      dispatch_token_present: false,
+      callback_token_present: false,
+      preview_routing_configured: false,
+    };
+  }
+}
+
 function updateActiveNav() {
   const hash = window.location.hash || "#applications";
   document.querySelectorAll(".topnav a").forEach((link) => {
@@ -571,6 +600,7 @@ async function refreshDashboard(announce = true) {
       loadDestinations(),
       loadWorkloads(),
       loadApiHealth(),
+      loadSystemReadiness(),
     ]);
     const failures = results.filter((result) => result.status === "rejected");
     elements.refreshStatus.textContent = failures.length
@@ -624,6 +654,7 @@ setSignedIn(Boolean(state.token));
 updateActiveNav();
 loadCatalog().catch(() => {});
 loadApiHealth();
+loadSystemReadiness();
 if (state.token) {
   api("/auth/me")
     .then((user) => {

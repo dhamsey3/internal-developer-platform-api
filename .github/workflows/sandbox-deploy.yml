@@ -42,7 +42,7 @@ jobs:
 
       - name: Start sandbox container
         run: |
-          container_name="idp-$SANDBOX_NAME"
+          container_name="$DEPLOYMENT_ID"
           docker pull "$SANDBOX_IMAGE"
           docker rm --force "$container_name" >/dev/null 2>&1 || true
           docker run -d \
@@ -64,7 +64,7 @@ jobs:
           fi
           health_url="http://$health_host:$HOST_PORT/health"
           root_url="http://$health_host:$HOST_PORT/"
-          for attempt in {1..20}; do
+          for attempt in {1..5}; do
             if curl --fail --silent "$health_url" >/dev/null; then
               echo "$health_url" > "$RUNNER_TEMP/sandbox-health-url"
               exit 0
@@ -87,50 +87,18 @@ jobs:
           if [ -n "$APPLICATION_BASE_URL" ]; then
             application_url="${APPLICATION_BASE_URL%/}:$HOST_PORT"
           fi
-          payload=$(printf '{"status":"running","url":"%s","host_port":%s,"runtime_id":"%s","logs":%s}' \
-            "$application_url" "$HOST_PORT" "$runtime_id" "$logs")
+          payload=$(printf '{"status":"running","url":"%s","host_port":%s,"container_port":%s,"runtime_id":"%s","logs":%s}' \
+            "$application_url" "$HOST_PORT" "$CONTAINER_PORT" "$runtime_id" "$logs")
           curl --fail --silent --show-error \
             -X PATCH "$IDP_API_URL/deployments/$DEPLOYMENT_ID" \
             -H "Content-Type: application/json" \
             -H "X-Deployment-Token: $CALLBACK_TOKEN" \
             -d "$payload"
-
-      - name: Schedule sandbox teardown
-        run: |
-          cleanup_script="/tmp/idp-sandbox-cleanup-$DEPLOYMENT_ID.sh"
-          cleanup_log="/tmp/idp-sandbox-cleanup-$DEPLOYMENT_ID.log"
-          cat > "$cleanup_script" <<'SCRIPT'
-          #!/usr/bin/env bash
-          set +e
-          sleep "$TTL_SECONDS"
-          container_name="idp-$SANDBOX_NAME"
-          final_log="/tmp/idp-sandbox-final-$DEPLOYMENT_ID.log"
-          docker logs --tail 100 "$container_name" > "$final_log" 2>&1 || true
-          docker rm --force "$container_name" >/dev/null 2>&1 || true
-          docker image prune --force --filter "until=24h" >/dev/null 2>&1 || true
-          logs="$(cat "$final_log" 2>/dev/null | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()[-4000:]))')"
-          payload=$(printf '{"status":"expired","host_port":%s,"logs":%s}' "$HOST_PORT" "$logs")
-          curl --fail --silent --show-error \
-            -X PATCH "$IDP_API_URL/deployments/$DEPLOYMENT_ID" \
-            -H "Content-Type: application/json" \
-            -H "X-Deployment-Token: $CALLBACK_TOKEN" \
-            -d "$payload"
-          rm -f "$final_log" "$0"
-          SCRIPT
-          chmod 700 "$cleanup_script"
-          nohup env \
-            DEPLOYMENT_ID="$DEPLOYMENT_ID" \
-            SANDBOX_NAME="$SANDBOX_NAME" \
-            HOST_PORT="$HOST_PORT" \
-            TTL_SECONDS="$TTL_SECONDS" \
-            IDP_API_URL="$IDP_API_URL" \
-            CALLBACK_TOKEN="$CALLBACK_TOKEN" \
-            bash "$cleanup_script" > "$cleanup_log" 2>&1 &
 
       - name: Teardown sandbox
         if: failure() || cancelled()
         run: |
-          container_name="idp-$SANDBOX_NAME"
+          container_name="$DEPLOYMENT_ID"
           docker logs --tail 100 "$container_name" > "$RUNNER_TEMP/sandbox-final.log" 2>&1 || true
           docker rm --force "$container_name" >/dev/null 2>&1 || true
           docker image prune --force --filter "until=24h" >/dev/null 2>&1 || true
@@ -138,8 +106,8 @@ jobs:
           final_status="failed"
           final_error="Sandbox workflow failed before scheduling normal expiration"
           logs="$(cat "$RUNNER_TEMP/sandbox-final.log" "$RUNNER_TEMP/sandbox-failure.log" 2>/dev/null | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()[-4000:]))')"
-          payload=$(printf '{"status":"%s","host_port":%s,"error":"%s","logs":%s}' \
-            "$final_status" "$HOST_PORT" "$final_error" "$logs")
+          payload=$(printf '{"status":"%s","host_port":%s,"container_port":%s,"error":"%s","logs":%s}' \
+            "$final_status" "$HOST_PORT" "$CONTAINER_PORT" "$final_error" "$logs")
           curl --fail --silent --show-error \
             -X PATCH "$IDP_API_URL/deployments/$DEPLOYMENT_ID" \
             -H "Content-Type: application/json" \

@@ -11,6 +11,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from api.routes import applications, auth, catalog, deployments, destinations, infrastructure, kubernetes, monitoring
 from api.routes import sandbox
+from api.routes import system
 from auth.rate_limit import rate_limiter
 from app.config import settings
 from app.logger import setup_logging
@@ -95,6 +96,7 @@ app.include_router(
     dependencies=[Depends(rate_limiter)],
 )
 app.include_router(sandbox.router, prefix="/sandbox", tags=["sandbox"], dependencies=[Depends(rate_limiter)])
+app.include_router(system.router, prefix="/system", tags=["system"])
 app.include_router(catalog.router, prefix="/catalog", tags=["catalog"], dependencies=[Depends(rate_limiter)])
 app.include_router(kubernetes.router, prefix="/kubernetes", tags=["kubernetes"], dependencies=[Depends(rate_limiter)])
 app.include_router(monitoring.router, prefix="/monitoring", tags=["monitoring"], dependencies=[Depends(rate_limiter)])

@@ -19,6 +19,13 @@ from services.application_service import mark_stale_runtime_deployments
 
 router = APIRouter()
 
+TERMINAL_SANDBOX_STATUSES = {"expired", "failed", "stopped"}
+SANDBOX_TRANSITIONS = {
+    "queued": {"queued", "running", "failed", "expired", "stopped"},
+    "running": {"running", "expired", "failed", "stopped"},
+    "deploying": {"deploying", "running", "failed", "expired", "stopped"},
+}
+
 
 def _user_id_from_authorization(authorization: str) -> Optional[int]:
     if not authorization.startswith("Bearer "):
@@ -82,12 +89,24 @@ def patch_deployment_status(
     if deployment is None:
         raise HTTPException(status_code=404, detail="Sandbox deployment not found")
 
+    if deployment.status in TERMINAL_SANDBOX_STATUSES:
+        if request.status == deployment.status:
+            return deployment
+        raise HTTPException(status_code=409, detail="Terminal sandbox deployment state cannot be overwritten")
+    allowed = SANDBOX_TRANSITIONS.get(deployment.status, {deployment.status, "failed"})
+    if request.status not in allowed:
+        raise HTTPException(status_code=409, detail="Illegal sandbox deployment state transition")
+    if request.status == deployment.status:
+        return deployment
+
     metadata = deployment.metadata_json or {}
     deployment.status = request.status
     deployment.url = request.url or deployment.url
     deployment.last_error = request.error
     if request.host_port:
         deployment.port = request.host_port
+    if request.container_port:
+        deployment.container_port = request.container_port
     deployment.metadata_json = {
         **metadata,
         "runtime_id": request.runtime_id or metadata.get("runtime_id"),

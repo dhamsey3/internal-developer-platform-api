@@ -174,6 +174,7 @@ class DeploymentStatusPatch(BaseModel):
     status: str = Field(..., regex=r"^(deploying|running|failed|expired|stopped)$")
     url: Optional[str] = Field(default=None, max_length=500)
     host_port: Optional[int] = Field(default=None, ge=1, le=65535)
+    container_port: Optional[int] = Field(default=None, ge=1, le=65535)
     runtime_id: Optional[str] = Field(default=None, max_length=255)
     logs: Optional[str] = Field(default=None, max_length=4000)
     error: Optional[str] = Field(default=None, max_length=2000)

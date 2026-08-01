@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Internal Developer Platform</title>
-    <link rel="stylesheet" href="/dashboard/styles.css?v=20260801-3" />
+    <link rel="stylesheet" href="/dashboard/styles.css?v=20260801-4" />
   </head>
   <body>
     <header class="topbar">
@@ -102,13 +102,13 @@
                 <h3>Source</h3>
                 <div class="segmented" role="radiogroup" aria-label="Source type">
                   <label><input type="radio" name="sourceType" value="container_image" checked /> Container image</label>
-                  <label><input type="radio" name="sourceType" value="repository" /> Git repository</label>
+                  <label id="sourceRepositoryOption" class="disabled-option"><input type="radio" name="sourceType" value="repository" disabled /> Git repository</label>
                 </div>
                 <div class="form-grid">
                   <label>
                     Template
                     <select id="templateSelect">
-                      <option value="">Custom application</option>
+                      <option value="" disabled>Choose an allowlisted template</option>
                     </select>
                   </label>
                   <label>
@@ -145,9 +145,9 @@
                 <h3>Dependencies</h3>
                 <div class="resource-options">
                   <label><input type="checkbox" name="resource" value="postgresql" /> PostgreSQL</label>
-                  <label><input type="checkbox" name="resource" value="redis" /> Redis</label>
-                  <label><input type="checkbox" name="resource" value="object_storage" /> Object storage</label>
-                  <label><input type="checkbox" name="resource" value="queue" /> Queue</label>
+                  <label class="disabled-option"><input type="checkbox" name="resource" value="redis" disabled /> Redis</label>
+                  <label class="disabled-option"><input type="checkbox" name="resource" value="object_storage" disabled /> Object storage</label>
+                  <label class="disabled-option"><input type="checkbox" name="resource" value="queue" disabled /> Queue</label>
                   <label><input type="checkbox" name="resource" value="secrets" /> Secrets</label>
                 </div>
                 <p class="meta">Requests are recorded now; provisioning adapters are enabled destination by destination.</p>
@@ -248,6 +248,6 @@
       </div>
     </main>
 
-    <script src="/dashboard/app.js?v=20260801-3"></script>
+    <script src="/dashboard/app.js?v=20260801-4"></script>
   </body>
 </html>

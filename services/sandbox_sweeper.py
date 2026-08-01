@@ -19,6 +19,7 @@ def sandbox_container_names(deployment: Deployment) -> list[str]:
     names = [str(deployment.id)]
     if deployment.name:
         names.append(f"idp-{deployment.name}")
+        names.append(deployment.name)
     return list(dict.fromkeys(names))
 
 
