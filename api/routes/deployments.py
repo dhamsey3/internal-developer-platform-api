@@ -1,4 +1,6 @@
 import secrets
+import subprocess
+from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException
@@ -40,6 +42,30 @@ def _user_id_from_authorization(authorization: str) -> Optional[int]:
         return int(subject)
     except (TypeError, ValueError):
         return None
+
+
+def _deployment_log_lines(deployment: Deployment) -> list[str]:
+    metadata = deployment.metadata_json or {}
+    persisted_logs = metadata.get("logs") or ""
+    if deployment.status in TERMINAL_SANDBOX_STATUSES:
+        return persisted_logs.splitlines() or ["Container terminated and logs purged."]
+
+    container_id = metadata.get("runtime_id") or str(deployment.id)
+    try:
+        result = subprocess.run(
+            ["docker", "logs", "--tail", "100", container_id],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return persisted_logs.splitlines() or ["Container terminated and logs purged."]
+
+    output = "\n".join(part for part in [result.stdout, result.stderr] if part)
+    if result.returncode == 0 and output:
+        return output.splitlines()[-100:]
+    return persisted_logs.splitlines() or ["Container terminated and logs purged."]
 
 
 @router.get("", response_model=list[DeploymentResponse])
@@ -117,6 +143,25 @@ def patch_deployment_status(
     db.commit()
     db.refresh(deployment)
     return deployment
+
+
+@router.get("/{id}/logs")
+def get_deployment_logs(
+    id: int,
+    db: Session = Depends(get_db),
+    authorization: str = Header(default=""),
+):
+    deployment = db.query(Deployment).filter(Deployment.id == id).first()
+    if not deployment:
+        raise HTTPException(status_code=404, detail="Deployment not found")
+    if not deployment.is_sandbox and deployment.owner_id != _user_id_from_authorization(authorization):
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    return {
+        "deployment_id": str(deployment.id),
+        "logs": _deployment_log_lines(deployment),
+        "fetched_at": datetime.now(timezone.utc).isoformat(),
+    }
+
 
 @router.get("/{id}", response_model=DeploymentResponse)
 def get_deployment(

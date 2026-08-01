@@ -563,6 +563,10 @@ dd {
   margin-top: 16px;
 }
 
+.log-viewer[hidden] {
+  display: none;
+}
+
 pre {
   min-height: 180px;
   max-height: 420px;

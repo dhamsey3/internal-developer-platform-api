@@ -12,6 +12,8 @@ const state = {
     preview_routing_configured: false,
   },
   deploymentPollTimer: null,
+  logPollTimer: null,
+  activeLogDeploymentId: null,
   sandboxPollTimer: null,
   sandboxCountdownTimer: null,
   sandboxDeployment: null,
@@ -28,7 +30,7 @@ const elements = Object.fromEntries(
     "applicationForm", "templateSelect", "appName", "imageField", "image", "repositoryField",
     "repositoryUrl", "port", "environment", "destinationSelect", "selectedDestinationReadiness",
     "applicationReview", "applicationMessage", "cancelCreateButton", "applicationList",
-    "refreshButton", "refreshStatus", "workloadList", "logsTarget", "logsOutput",
+    "refreshButton", "refreshStatus", "workloadList", "logsPanel", "logsTarget", "logsOutput", "closeLogsButton",
     "sandboxTemplate", "sandboxLaunchButton", "sandboxStatus", "sandboxDeploymentId",
     "sandboxCountdown", "sandboxPort", "sandboxOpenLink", "sandboxMessage", "sourceRepositoryOption",
   ].map((id) => [id, document.querySelector(`#${id}`)])
@@ -407,7 +409,7 @@ function renderWorkloads(workloads) {
         </div>
         <div class="row-actions">
           <button class="ghost" type="button" data-action="status" data-id="${workload.id}">Status</button>
-          <button class="ghost" type="button" data-action="logs" data-id="${workload.id}" data-name="${escapeHtml(workload.name)}" data-namespace="${escapeHtml(workload.namespace)}">Logs</button>
+          <button class="ghost" type="button" data-action="logs" data-id="${workload.id}" data-name="${escapeHtml(workload.name)}" data-namespace="${escapeHtml(workload.namespace)}">View Logs</button>
         </div>
       </div>
     `;
@@ -417,6 +419,42 @@ function renderWorkloads(workloads) {
 async function loadWorkloads() {
   if (!state.token) return;
   renderWorkloads(await api("/deployments"));
+}
+
+function stopLogPoll() {
+  if (state.logPollTimer) {
+    window.clearInterval(state.logPollTimer);
+    state.logPollTimer = null;
+  }
+  state.activeLogDeploymentId = null;
+}
+
+async function refreshDeploymentLogs(id) {
+  const result = await api(`/deployments/${id}/logs`);
+  const fetchedAt = new Date(result.fetched_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  elements.logsOutput.textContent = [
+    `Fetched ${fetchedAt}`,
+    "",
+    ...(result.logs.length ? result.logs : ["No logs reported."]),
+  ].join("\n");
+}
+
+async function openDeploymentLogs(id, name) {
+  stopLogPoll();
+  state.activeLogDeploymentId = id;
+  elements.logsPanel.hidden = false;
+  elements.logsTarget.textContent = name;
+  elements.logsOutput.textContent = "Loading logs...";
+  try {
+    await refreshDeploymentLogs(id);
+    state.logPollTimer = window.setInterval(() => {
+      refreshDeploymentLogs(id).catch((error) => {
+        elements.logsOutput.textContent = error.message;
+      });
+    }, 5000);
+  } catch (error) {
+    elements.logsOutput.textContent = error.message;
+  }
 }
 
 function applyTemplate(templateId) {
@@ -522,16 +560,7 @@ async function handleWorkloadAction(event) {
       elements.logsOutput.textContent = JSON.stringify(workload, null, 2);
     } else {
       const workload = state.workloads.find((item) => item.id === Number(button.dataset.id));
-      if (workload?.metadata_json?.runtime === "linux_docker") {
-        elements.logsTarget.textContent = workload.name;
-        elements.logsOutput.textContent = workload.metadata_json.logs || "No runtime logs have been reported yet.";
-      } else {
-        elements.logsTarget.textContent = `${button.dataset.namespace}/${button.dataset.name}`;
-        const result = await api(
-          `/monitoring/logs/${encodeURIComponent(button.dataset.name)}?namespace=${encodeURIComponent(button.dataset.namespace)}`
-        );
-        elements.logsOutput.textContent = result.logs;
-      }
+      await openDeploymentLogs(button.dataset.id, workload?.name || button.dataset.name);
     }
   } catch (error) {
     elements.logsOutput.textContent = error.message;
@@ -627,6 +656,7 @@ elements.authForm.addEventListener("submit", handleAuth);
 elements.logoutButton.addEventListener("click", () => {
   if (state.deploymentPollTimer) window.clearTimeout(state.deploymentPollTimer);
   state.deploymentPollTimer = null;
+  stopLogPoll();
   stopSandboxPoll();
   stopSandboxCountdown();
   state.token = "";
@@ -645,6 +675,10 @@ elements.destinationSelect.addEventListener("change", renderSelectedDestination)
 elements.applicationForm.addEventListener("input", updateReview);
 document.querySelectorAll('input[name="sourceType"]').forEach((input) => input.addEventListener("change", updateSourceFields));
 elements.refreshButton.addEventListener("click", () => refreshDashboard());
+elements.closeLogsButton.addEventListener("click", () => {
+  stopLogPoll();
+  elements.logsPanel.hidden = true;
+});
 elements.workloadList.addEventListener("click", handleWorkloadAction);
 elements.applicationList.addEventListener("click", handleApplicationAction);
 elements.sandboxLaunchButton.addEventListener("click", handleSandboxLaunch);

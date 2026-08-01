@@ -237,10 +237,13 @@
             </div>
           </div>
           <div id="workloadList" class="workload-list"></div>
-          <div class="log-viewer">
+          <div id="logsPanel" class="log-viewer" hidden>
             <div class="section-heading">
               <h3>Logs and status</h3>
-              <span id="logsTarget" class="pill">select workload</span>
+              <div class="row-actions">
+                <span id="logsTarget" class="pill">select workload</span>
+                <button id="closeLogsButton" class="ghost" type="button">Close</button>
+              </div>
             </div>
             <pre id="logsOutput">Select a runtime workload to inspect it.</pre>
           </div>
@@ -248,6 +251,6 @@
       </div>
     </main>
 
-    <script src="/dashboard/app.js?v=20260801-4"></script>
+    <script src="/dashboard/app.js?v=20260801-5"></script>
   </body>
 </html>
