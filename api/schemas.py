@@ -90,8 +90,12 @@ class ApplicationResponse(BaseModel):
 
 class ApplicationDeploymentCallback(BaseModel):
     status: str = Field(..., regex=r"^(deploying|running|failed)$")
+    attempt_id: Optional[str] = Field(default=None, max_length=64)
     url: Optional[str] = Field(default=None, max_length=500)
     error: Optional[str] = Field(default=None, max_length=2000)
+    runtime_id: Optional[str] = Field(default=None, max_length=255)
+    health_url: Optional[str] = Field(default=None, max_length=500)
+    logs: Optional[str] = Field(default=None, max_length=4000)
 
 
 class InfrastructureCreateRequest(BaseModel):
