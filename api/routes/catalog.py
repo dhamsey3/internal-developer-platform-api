@@ -6,7 +6,10 @@ APP_TEMPLATES = [
     {
         "id": "deploy-demo-app",
         "name": "Deploy Demo App",
-        "description": "Tiny public whoami service with root and /health endpoints for validating the deployment lifecycle.",
+        "description": (
+            "Tiny public whoami service with root and /health endpoints for "
+            "validating the deployment lifecycle."
+        ),
         "default_app_name": "idp-demo",
         "image": "mpepping/whoami:latest",
         "port": 8000,

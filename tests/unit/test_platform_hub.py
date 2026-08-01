@@ -22,7 +22,12 @@ def test_linux_destination_reports_missing_deployment_workflow():
         kind="linux_docker",
         provider="existing_server",
         environment="development",
-        config={"enabled": True, "runner_label": "idp-vm", "github_repository": "example/platform", "deployment_workflow": False},
+        config={
+            "enabled": True,
+            "runner_label": "idp-vm",
+            "github_repository": "example/platform",
+            "deployment_workflow": False,
+        },
         capabilities=["containers"],
     )
 
@@ -49,7 +54,12 @@ def test_application_catalog_records_destination_and_resource_gaps():
             kind="linux_docker",
             provider="existing_server",
             environment="development",
-            config={"enabled": True, "runner_label": "idp-vm", "github_repository": "example/platform", "deployment_workflow": False},
+            config={
+                "enabled": True,
+                "runner_label": "idp-vm",
+                "github_repository": "example/platform",
+                "deployment_workflow": False,
+            },
             capabilities=["containers"],
         )
         db.add_all([user, destination])
