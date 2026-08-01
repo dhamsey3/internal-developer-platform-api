@@ -32,11 +32,13 @@ class LinuxDockerAdapter(DestinationAdapter):
         checks = {
             "enabled": bool(config.get("enabled")),
             "runner_label": bool(config.get("runner_label")),
+            "github_repository": bool(config.get("github_repository")),
             "deployment_workflow": bool(config.get("deployment_workflow")),
         }
         missing_labels = {
             "enabled": "Enable this destination",
             "runner_label": "Configure a dedicated GitHub runner label",
+            "github_repository": "Configure the GitHub repository used for workflow dispatch",
             "deployment_workflow": "Configure an application deployment workflow",
         }
         missing = [missing_labels[key] for key, passed in checks.items() if not passed]
@@ -81,6 +83,7 @@ def seed_destinations(db: Session) -> None:
                 "enabled": settings.DEFAULT_DESTINATION_ENABLED,
                 "runner_label": settings.DEFAULT_RUNNER_LABEL,
                 "base_url": settings.DEFAULT_DESTINATION_URL,
+                "github_repository": settings.GITHUB_REPOSITORY,
                 "deployment_workflow": bool(
                     settings.GITHUB_DISPATCH_TOKEN and settings.DEPLOYMENT_CALLBACK_TOKEN
                 ),
@@ -119,6 +122,7 @@ def seed_destinations(db: Session) -> None:
                 "enabled": settings.DEFAULT_DESTINATION_ENABLED,
                 "runner_label": settings.DEFAULT_RUNNER_LABEL,
                 "base_url": settings.DEFAULT_DESTINATION_URL,
+                "github_repository": settings.GITHUB_REPOSITORY,
                 "deployment_workflow": bool(
                     settings.GITHUB_DISPATCH_TOKEN and settings.DEPLOYMENT_CALLBACK_TOKEN
                 ),

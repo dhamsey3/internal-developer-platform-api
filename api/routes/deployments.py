@@ -10,6 +10,7 @@ from services.deployment_service import (
     get_kubernetes_deployment_status,
     provision_application,
 )
+from services.application_service import mark_stale_runtime_deployments
 
 router = APIRouter()
 
@@ -19,12 +20,21 @@ def list_deployments(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return (
+    deployments = (
         db.query(Deployment)
         .filter(Deployment.owner_id == current_user.id)
         .order_by(Deployment.created_at.desc())
         .all()
     )
+    if mark_stale_runtime_deployments(db, deployments):
+        db.commit()
+        deployments = (
+            db.query(Deployment)
+            .filter(Deployment.owner_id == current_user.id)
+            .order_by(Deployment.created_at.desc())
+            .all()
+        )
+    return deployments
 
 
 @router.post("", response_model=DeploymentResponse, status_code=201)
@@ -44,6 +54,9 @@ def get_deployment(
     deployment = db.query(Deployment).filter(Deployment.id == id, Deployment.owner_id == current_user.id).first()
     if not deployment:
         raise HTTPException(status_code=404, detail="Deployment not found")
+    if mark_stale_runtime_deployments(db, [deployment]):
+        db.commit()
+        db.refresh(deployment)
     if deployment.status == "running":
         try:
             deployment.metadata_json = {

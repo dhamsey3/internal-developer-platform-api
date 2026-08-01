@@ -18,6 +18,9 @@ on:
       host_port:
         required: true
         type: string
+      attempt_id:
+        required: true
+        type: string
       resources:
         required: false
         type: string
@@ -40,6 +43,7 @@ jobs:
       APPLICATION_IMAGE: ${{ inputs.image }}
       CONTAINER_PORT: ${{ inputs.port }}
       HOST_PORT: ${{ inputs.host_port }}
+      ATTEMPT_ID: ${{ inputs.attempt_id }}
       REQUESTED_RESOURCES: ${{ inputs.resources }}
       IDP_API_URL: ${{ vars.IDP_API_URL }}
       APPLICATION_BASE_URL: ${{ vars.APPLICATION_BASE_URL }}
@@ -53,6 +57,7 @@ jobs:
           [[ "$APPLICATION_IMAGE" =~ ^[A-Za-z0-9./:@_-]+$ ]]
           [[ "$CONTAINER_PORT" =~ ^[0-9]+$ ]] && (( CONTAINER_PORT >= 1 && CONTAINER_PORT <= 65535 ))
           [[ "$HOST_PORT" =~ ^[0-9]+$ ]] && (( HOST_PORT >= 10000 && HOST_PORT <= 65535 ))
+          [[ "$ATTEMPT_ID" =~ ^[a-f0-9]{32}$ ]]
           [[ "$APPLICATION_BIND_ADDRESS" =~ ^[0-9.]+$ ]]
           test -n "$IDP_API_URL"
           test -n "$CALLBACK_TOKEN"
@@ -63,7 +68,7 @@ jobs:
             -X POST "$IDP_API_URL/applications/$APPLICATION_ID/deployment-callback" \
             -H "Content-Type: application/json" \
             -H "X-Deployment-Token: $CALLBACK_TOKEN" \
-            -d '{"status":"deploying"}'
+            -d "{\"status\":\"deploying\",\"attempt_id\":\"$ATTEMPT_ID\"}"
 
       - name: Prepare destination and resources
         run: |
@@ -116,6 +121,7 @@ jobs:
           container_name="idp-app-$APPLICATION_ID-$APPLICATION_NAME"
           secret_file="$HOME/.idp/applications/$APPLICATION_ID/app.env"
           previous_image=$(docker inspect --format '{{.Config.Image}}' "$container_name" 2>/dev/null || true)
+          docker pull "$APPLICATION_IMAGE"
           docker stop "$container_name" >/dev/null 2>&1 || true
           docker rm "$container_name" >/dev/null 2>&1 || true
 
@@ -137,14 +143,21 @@ jobs:
           if [ "$health_host" = "0.0.0.0" ]; then
             health_host="127.0.0.1"
           fi
+          health_url="http://$health_host:$HOST_PORT/health"
+          root_url="http://$health_host:$HOST_PORT/"
           for attempt in {1..20}; do
-            if curl --fail --silent "http://$health_host:$HOST_PORT/" >/dev/null; then
+            if curl --fail --silent "$health_url" >/dev/null; then
+              echo "$health_url" > "$RUNNER_TEMP/application-health-url"
+              exit 0
+            fi
+            if curl --fail --silent "$root_url" >/dev/null; then
+              echo "$root_url" > "$RUNNER_TEMP/application-health-url"
               exit 0
             fi
             sleep 2
           done
 
-          docker logs --tail 100 "$container_name" || true
+          docker logs --tail 100 "$container_name" > "$RUNNER_TEMP/application-failure.log" 2>&1 || true
           docker rm --force "$container_name" >/dev/null 2>&1 || true
           if [ -n "$previous_image" ]; then
             run_application "$previous_image"
@@ -154,10 +167,19 @@ jobs:
       - name: Report deployment success
         run: |
           application_url=""
+          health_url="$(cat "$RUNNER_TEMP/application-health-url" 2>/dev/null || true)"
+          runtime_id="$(docker inspect --format '{{.Id}}' "idp-app-$APPLICATION_ID-$APPLICATION_NAME" 2>/dev/null || true)"
+          logs="$(docker logs --tail 80 "idp-app-$APPLICATION_ID-$APPLICATION_NAME" 2>&1 | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()[-4000:]))')"
           if [ -n "$APPLICATION_BASE_URL" ]; then
             application_url="${APPLICATION_BASE_URL%/}:$HOST_PORT"
+            if [ -n "$health_url" ]; then
+              health_path="${health_url#http://127.0.0.1:$HOST_PORT}"
+              health_path="${health_path#http://$APPLICATION_BIND_ADDRESS:$HOST_PORT}"
+              health_url="$application_url$health_path"
+            fi
           fi
-          payload=$(printf '{"status":"running","url":"%s"}' "$application_url")
+          payload=$(printf '{"status":"running","attempt_id":"%s","url":"%s","health_url":"%s","runtime_id":"%s","logs":%s}' \
+            "$ATTEMPT_ID" "$application_url" "$health_url" "$runtime_id" "$logs")
           curl --fail --silent --show-error \
             -X POST "$IDP_API_URL/applications/$APPLICATION_ID/deployment-callback" \
             -H "Content-Type: application/json" \
@@ -167,8 +189,10 @@ jobs:
       - name: Report deployment failure
         if: failure()
         run: |
+          logs="$(cat "$RUNNER_TEMP/application-failure.log" 2>/dev/null | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()[-4000:]))')"
+          payload=$(printf '{"status":"failed","attempt_id":"%s","error":"The VM deployment workflow failed. Review the GitHub Actions log.","logs":%s}' "$ATTEMPT_ID" "$logs")
           curl --fail --silent --show-error \
             -X POST "$IDP_API_URL/applications/$APPLICATION_ID/deployment-callback" \
             -H "Content-Type: application/json" \
             -H "X-Deployment-Token: $CALLBACK_TOKEN" \
-            -d '{"status":"failed","error":"The VM deployment workflow failed. Review the GitHub Actions log."}'
+            -d "$payload"
