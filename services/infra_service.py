@@ -5,7 +5,7 @@ import shutil
 import subprocess
 import tempfile
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 from jinja2 import StrictUndefined, Template
 
@@ -196,7 +196,7 @@ def _build_context(name: str, config: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def validate_infrastructure_config(name: str, cloud_provider: str, config: dict[str, Any]) -> str | None:
+def validate_infrastructure_config(name: str, cloud_provider: str, config: dict[str, Any]) -> Optional[str]:
     if cloud_provider != "aws":
         return "Unsupported cloud provider"
     try:

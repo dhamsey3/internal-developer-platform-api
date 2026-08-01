@@ -1,5 +1,5 @@
 import logging
-from typing import Callable
+from typing import Callable, Union
 
 from database.models import Infrastructure
 from database.session import SessionLocal
@@ -8,7 +8,7 @@ from services.infra_service import destroy_infrastructure, provision_infrastruct
 logger = logging.getLogger(__name__)
 
 
-TerraformAction = Callable[[str, str, dict], bool | str]
+TerraformAction = Callable[[str, str, dict], Union[bool, str]]
 
 
 def _run_infrastructure_job(

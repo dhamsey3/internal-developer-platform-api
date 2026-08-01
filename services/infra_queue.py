@@ -1,6 +1,7 @@
 import json
 import logging
 from datetime import datetime, timezone
+from typing import Optional, Union
 from uuid import uuid4
 
 import redis
@@ -26,7 +27,7 @@ def _redis_client() -> redis.Redis:
 def enqueue_infrastructure_job(
     action: str,
     infrastructure_id: int,
-    background_tasks: BackgroundTasks | None = None,
+    background_tasks: Optional[BackgroundTasks] = None,
 ) -> str:
     if action not in SUPPORTED_ACTIONS:
         raise InfrastructureQueueError(f"Unsupported infrastructure job action: {action}")
@@ -57,7 +58,7 @@ def enqueue_infrastructure_job(
     return job_id
 
 
-def decode_job(raw_payload: bytes | str) -> dict:
+def decode_job(raw_payload: Union[bytes, str]) -> dict:
     if isinstance(raw_payload, bytes):
         raw_payload = raw_payload.decode("utf-8")
     payload = json.loads(raw_payload)

@@ -34,15 +34,18 @@ def startup_tasks():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     startup_tasks()
-    sweeper_task = asyncio.create_task(sandbox_sweeper_loop())
+    sweeper_task = None
+    if settings.ENABLE_SANDBOX_SWEEPER:
+        sweeper_task = asyncio.create_task(sandbox_sweeper_loop())
     try:
         yield
     finally:
-        sweeper_task.cancel()
-        try:
-            await sweeper_task
-        except asyncio.CancelledError:
-            pass
+        if sweeper_task is not None:
+            sweeper_task.cancel()
+            try:
+                await sweeper_task
+            except asyncio.CancelledError:
+                pass
 
 
 app = FastAPI(

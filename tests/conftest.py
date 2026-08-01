@@ -1,6 +1,9 @@
 import os
 import sys
 
+os.environ.setdefault("DATABASE_URL", "sqlite:///./test_idp.db")
+os.environ.setdefault("ENABLE_SANDBOX_SWEEPER", "false")
+
 import pytest
 from fastapi.testclient import TestClient
 

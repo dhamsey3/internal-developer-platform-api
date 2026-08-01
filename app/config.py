@@ -39,6 +39,7 @@ class Settings(BaseSettings):
     TERRAFORM_JOB_QUEUE_NAME: str = Field(default="terraform-jobs", env="TERRAFORM_JOB_QUEUE_NAME")
     RATE_LIMIT_REQUESTS_PER_HOUR: int = Field(default=100, env="RATE_LIMIT_REQUESTS_PER_HOUR")
     REQUIRE_AUTH_FOR_PLATFORM_APIS: bool = Field(default=True, env="REQUIRE_AUTH_FOR_PLATFORM_APIS")
+    ENABLE_SANDBOX_SWEEPER: bool = Field(default=True, env="ENABLE_SANDBOX_SWEEPER")
 
     @validator("SECRET_KEY")
     def require_strong_secret_for_non_local(cls, value, values):
