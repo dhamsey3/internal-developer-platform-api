@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import subprocess
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -8,6 +7,8 @@ from sqlalchemy.orm import Session
 
 from database.models import Deployment
 from database.session import SessionLocal
+from services.providers.factory import get_deployment_provider
+from services.providers.vm_docker import sandbox_container_names as vm_docker_container_names
 
 logger = logging.getLogger(__name__)
 
@@ -16,28 +17,11 @@ EXPIRED_SANDBOX_STATUSES = ("queued", "running")
 
 
 def sandbox_container_names(deployment: Deployment) -> list[str]:
-    names = [str(deployment.id)]
-    if deployment.name:
-        names.append(f"idp-{deployment.name}")
-        names.append(deployment.name)
-    return list(dict.fromkeys(names))
+    return vm_docker_container_names(deployment)
 
 
 def remove_sandbox_container(deployment: Deployment) -> None:
-    for container_name in sandbox_container_names(deployment):
-        try:
-            subprocess.run(
-                ["docker", "rm", "-f", container_name],
-                check=False,
-                capture_output=True,
-                text=True,
-                timeout=20,
-            )
-        except FileNotFoundError:
-            logger.info("Docker CLI is not available while sweeping sandbox %s", deployment.id)
-            return
-        except subprocess.TimeoutExpired:
-            logger.warning("Timed out removing sandbox container %s", container_name)
+    get_deployment_provider(deployment).teardown(deployment)
 
 
 def sweep_expired_sandboxes(db: Session, now: Optional[datetime] = None) -> int:

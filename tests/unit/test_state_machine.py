@@ -43,7 +43,8 @@ def _deployment(db, status="queued", expires_at=None):
 def test_valid_sandbox_lifecycle_queued_running_expired(monkeypatch):
     engine, db = _session()
     monkeypatch.setattr("api.routes.deployments.settings.DEPLOYMENT_CALLBACK_TOKEN", "callback-token")
-    monkeypatch.setattr("services.sandbox_sweeper.subprocess.run", lambda *args, **kwargs: None)
+    monkeypatch.setattr("api.routes.deployments.settings.PREVIEW_ROUTING_ENABLED", False)
+    monkeypatch.setattr("services.providers.vm_docker.subprocess.run", lambda *args, **kwargs: None)
     try:
         deployment = _deployment(db, expires_at=datetime.now(timezone.utc) - timedelta(seconds=1))
 
@@ -127,6 +128,81 @@ def test_sandbox_callback_rejects_missing_and_invalid_tokens(monkeypatch):
                 assert exc.status_code == 401
             else:
                 raise AssertionError("Expected invalid callback token to be rejected")
+    finally:
+        db.close()
+        Base.metadata.drop_all(bind=engine)
+        engine.dispose()
+
+
+def test_running_callback_generates_preview_url_when_routing_enabled(monkeypatch):
+    engine, db = _session()
+    monkeypatch.setattr("api.routes.deployments.settings.DEPLOYMENT_CALLBACK_TOKEN", "callback-token")
+    monkeypatch.setattr("api.routes.deployments.settings.PREVIEW_ROUTING_ENABLED", True)
+    monkeypatch.setattr("api.routes.deployments.settings.PREVIEW_ROUTING_DOMAIN", "127.0.0.1.nip.io")
+    monkeypatch.setattr("api.routes.deployments.settings.PREVIEW_ROUTING_SCHEME", "http")
+    monkeypatch.setattr("api.routes.deployments.settings.PREVIEW_ROUTING_PORT", 0)
+    try:
+        deployment = _deployment(db)
+
+        updated = patch_deployment_status(
+            deployment.id,
+            DeploymentStatusPatch(status="running", url="http://fallback.test", host_port=20042),
+            "callback-token",
+            db,
+        )
+
+        assert updated.status == "running"
+        assert updated.url == f"http://{deployment.id}.127.0.0.1.nip.io:20042"
+    finally:
+        db.close()
+        Base.metadata.drop_all(bind=engine)
+        engine.dispose()
+
+
+def test_failed_callback_does_not_generate_preview_url(monkeypatch):
+    engine, db = _session()
+    monkeypatch.setattr("api.routes.deployments.settings.DEPLOYMENT_CALLBACK_TOKEN", "callback-token")
+    monkeypatch.setattr("api.routes.deployments.settings.PREVIEW_ROUTING_ENABLED", True)
+    monkeypatch.setattr("api.routes.deployments.settings.PREVIEW_ROUTING_DOMAIN", "127.0.0.1.nip.io")
+    monkeypatch.setattr("api.routes.deployments.settings.PREVIEW_ROUTING_SCHEME", "http")
+    monkeypatch.setattr("api.routes.deployments.settings.PREVIEW_ROUTING_PORT", 0)
+    try:
+        deployment = _deployment(db)
+
+        updated = patch_deployment_status(
+            deployment.id,
+            DeploymentStatusPatch(status="failed", url="http://fallback.test", host_port=20042),
+            "callback-token",
+            db,
+        )
+
+        assert updated.status == "failed"
+        assert updated.url is None
+    finally:
+        db.close()
+        Base.metadata.drop_all(bind=engine)
+        engine.dispose()
+
+
+def test_expired_callback_does_not_generate_preview_url(monkeypatch):
+    engine, db = _session()
+    monkeypatch.setattr("api.routes.deployments.settings.DEPLOYMENT_CALLBACK_TOKEN", "callback-token")
+    monkeypatch.setattr("api.routes.deployments.settings.PREVIEW_ROUTING_ENABLED", True)
+    monkeypatch.setattr("api.routes.deployments.settings.PREVIEW_ROUTING_DOMAIN", "127.0.0.1.nip.io")
+    monkeypatch.setattr("api.routes.deployments.settings.PREVIEW_ROUTING_SCHEME", "http")
+    monkeypatch.setattr("api.routes.deployments.settings.PREVIEW_ROUTING_PORT", 0)
+    try:
+        deployment = _deployment(db)
+
+        updated = patch_deployment_status(
+            deployment.id,
+            DeploymentStatusPatch(status="expired", url="http://fallback.test", host_port=20042),
+            "callback-token",
+            db,
+        )
+
+        assert updated.status == "expired"
+        assert updated.url is None
     finally:
         db.close()
         Base.metadata.drop_all(bind=engine)

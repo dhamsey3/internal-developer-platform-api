@@ -1,5 +1,4 @@
 import secrets
-import subprocess
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -18,6 +17,7 @@ from services.deployment_service import (
     provision_application,
 )
 from services.application_service import mark_stale_runtime_deployments
+from services.providers.factory import get_deployment_provider
 
 router = APIRouter()
 
@@ -27,6 +27,19 @@ SANDBOX_TRANSITIONS = {
     "running": {"running", "expired", "failed", "stopped"},
     "deploying": {"deploying", "running", "failed", "expired", "stopped"},
 }
+
+
+def _sandbox_preview_url(deployment_id: int, host_port: Optional[int]) -> Optional[str]:
+    if not settings.PREVIEW_ROUTING_ENABLED or not host_port:
+        return None
+    domain = settings.PREVIEW_ROUTING_DOMAIN.strip().strip(".")
+    if not domain:
+        return None
+    host = f"{deployment_id}.{domain}"
+    port = settings.PREVIEW_ROUTING_PORT or host_port
+    if port in {80, 443}:
+        return f"{settings.PREVIEW_ROUTING_SCHEME}://{host}"
+    return f"{settings.PREVIEW_ROUTING_SCHEME}://{host}:{port}"
 
 
 def _user_id_from_authorization(authorization: str) -> Optional[int]:
@@ -45,27 +58,7 @@ def _user_id_from_authorization(authorization: str) -> Optional[int]:
 
 
 def _deployment_log_lines(deployment: Deployment) -> list[str]:
-    metadata = deployment.metadata_json or {}
-    persisted_logs = metadata.get("logs") or ""
-    if deployment.status in TERMINAL_SANDBOX_STATUSES:
-        return persisted_logs.splitlines() or ["Container terminated and logs purged."]
-
-    container_id = metadata.get("runtime_id") or str(deployment.id)
-    try:
-        result = subprocess.run(
-            ["docker", "logs", "--tail", "100", container_id],
-            check=False,
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        return persisted_logs.splitlines() or ["Container terminated and logs purged."]
-
-    output = "\n".join(part for part in [result.stdout, result.stderr] if part)
-    if result.returncode == 0 and output:
-        return output.splitlines()[-100:]
-    return persisted_logs.splitlines() or ["Container terminated and logs purged."]
+    return get_deployment_provider(deployment).get_logs(deployment, tail=100)
 
 
 @router.get("", response_model=list[DeploymentResponse])
@@ -127,7 +120,8 @@ def patch_deployment_status(
 
     metadata = deployment.metadata_json or {}
     deployment.status = request.status
-    deployment.url = request.url or deployment.url
+    if request.status == "running":
+        deployment.url = _sandbox_preview_url(deployment.id, request.host_port) or request.url or deployment.url
     deployment.last_error = request.error
     if request.host_port:
         deployment.port = request.host_port

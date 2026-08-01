@@ -40,6 +40,10 @@ class Settings(BaseSettings):
     RATE_LIMIT_REQUESTS_PER_HOUR: int = Field(default=100, env="RATE_LIMIT_REQUESTS_PER_HOUR")
     REQUIRE_AUTH_FOR_PLATFORM_APIS: bool = Field(default=True, env="REQUIRE_AUTH_FOR_PLATFORM_APIS")
     ENABLE_SANDBOX_SWEEPER: bool = Field(default=True, env="ENABLE_SANDBOX_SWEEPER")
+    PREVIEW_ROUTING_ENABLED: bool = Field(default=False, env="PREVIEW_ROUTING_ENABLED")
+    PREVIEW_ROUTING_DOMAIN: str = Field(default="127.0.0.1.nip.io", env="PREVIEW_ROUTING_DOMAIN")
+    PREVIEW_ROUTING_SCHEME: str = Field(default="http", env="PREVIEW_ROUTING_SCHEME")
+    PREVIEW_ROUTING_PORT: int = Field(default=0, env="PREVIEW_ROUTING_PORT")
 
     @validator("SECRET_KEY")
     def require_strong_secret_for_non_local(cls, value, values):
@@ -52,6 +56,18 @@ class Settings(BaseSettings):
     def validate_terraform_job_backend(cls, value):
         if value not in {"background", "redis"}:
             raise ValueError("TERRAFORM_JOB_BACKEND must be either 'background' or 'redis'")
+        return value
+
+    @validator("PREVIEW_ROUTING_SCHEME")
+    def validate_preview_routing_scheme(cls, value):
+        if value not in {"http", "https"}:
+            raise ValueError("PREVIEW_ROUTING_SCHEME must be either 'http' or 'https'")
+        return value
+
+    @validator("PREVIEW_ROUTING_PORT")
+    def validate_preview_routing_port(cls, value):
+        if value < 0 or value > 65535:
+            raise ValueError("PREVIEW_ROUTING_PORT must be between 0 and 65535")
         return value
 
     @property

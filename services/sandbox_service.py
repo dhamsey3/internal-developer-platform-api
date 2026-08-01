@@ -1,14 +1,13 @@
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-import httpx
 from sqlalchemy.orm import Session
 
-from app.config import settings
 from database.models import Deployment
+from services.providers.factory import get_deployment_provider
+from services.providers.vm_docker import SANDBOX_TTL_SECONDS
 
 
-SANDBOX_TTL_SECONDS = 15 * 60
 SANDBOX_TEMPLATES = {
     "whoami": {
         "image": "mpepping/whoami:latest",
@@ -48,6 +47,7 @@ def create_sandbox_deployment(db: Session, template_name: str) -> Deployment:
         is_sandbox=True,
         metadata_json={
             "template": template_name,
+            "provider": "vm_docker",
             "ttl_seconds": SANDBOX_TTL_SECONDS,
             "queued_at": now.isoformat(),
         },
@@ -69,33 +69,4 @@ def create_sandbox_deployment(db: Session, template_name: str) -> Deployment:
 
 
 def dispatch_sandbox_deployment(deployment: Deployment) -> None:
-    if not settings.GITHUB_DISPATCH_TOKEN:
-        raise ValueError("GitHub sandbox dispatch is not configured")
-    response = httpx.post(
-        f"https://api.github.com/repos/{settings.GITHUB_REPOSITORY}/dispatches",
-        headers={
-            "Accept": "application/vnd.github+json",
-            "Authorization": f"Bearer {settings.GITHUB_DISPATCH_TOKEN}",
-            "X-GitHub-Api-Version": "2022-11-28",
-        },
-        json={
-            "event_type": "deploy_sandbox",
-            "client_payload": {
-                "deployment_id": str(deployment.id),
-                "name": deployment.name,
-                "image": deployment.image,
-                "container_port": str(deployment.container_port),
-                "host_port": str(deployment.port),
-                "ttl_seconds": str(SANDBOX_TTL_SECONDS),
-            },
-        },
-        timeout=20,
-    )
-    if response.status_code != 204:
-        detail = response.text[:500] if response.text else "no response body"
-        accepted_permissions = response.headers.get("x-accepted-github-permissions")
-        if accepted_permissions:
-            detail = f"{detail} Required permissions: {accepted_permissions}"
-        raise RuntimeError(
-            f"GitHub rejected the sandbox dispatch with status {response.status_code}: {detail}"
-        )
+    get_deployment_provider(deployment).dispatch(deployment)

@@ -71,9 +71,9 @@ def test_sandbox_dispatch_sends_repository_dispatch_payload(monkeypatch):
     )
     response = SimpleNamespace(status_code=204)
     post = MagicMock(return_value=response)
-    monkeypatch.setattr("services.sandbox_service.httpx.post", post)
-    monkeypatch.setattr("services.sandbox_service.settings.GITHUB_DISPATCH_TOKEN", "token")
-    monkeypatch.setattr("services.sandbox_service.settings.GITHUB_REPOSITORY", "example/platform")
+    monkeypatch.setattr("services.providers.vm_docker.httpx.post", post)
+    monkeypatch.setattr("services.providers.vm_docker.settings.GITHUB_DISPATCH_TOKEN", "token")
+    monkeypatch.setattr("services.providers.vm_docker.settings.GITHUB_REPOSITORY", "example/platform")
 
     dispatch_sandbox_deployment(deployment)
 
@@ -83,6 +83,28 @@ def test_sandbox_dispatch_sends_repository_dispatch_payload(monkeypatch):
     assert request["json"]["client_payload"]["image"] == "mpepping/whoami:latest"
     assert request["json"]["client_payload"]["host_port"] == "20009"
     assert "token" not in request["json"]["client_payload"]
+
+
+def test_sandbox_dispatch_invokes_configured_provider(monkeypatch):
+    deployment = Deployment(
+        id=10,
+        owner_id=0,
+        name="sandbox-whoami-10",
+        namespace="sandbox",
+        image="mpepping/whoami:latest",
+        port=20010,
+        container_port=8000,
+        replicas=1,
+        is_sandbox=True,
+        status="queued",
+        metadata_json={"provider": "vm_docker"},
+    )
+    provider = MagicMock()
+    monkeypatch.setattr("services.sandbox_service.get_deployment_provider", MagicMock(return_value=provider))
+
+    dispatch_sandbox_deployment(deployment)
+
+    provider.dispatch.assert_called_once_with(deployment)
 
 
 def test_sandbox_dispatch_failure_returns_json_dependency_error(monkeypatch):

@@ -26,6 +26,8 @@ jobs:
       IDP_API_URL: ${{ vars.IDP_API_URL }}
       APPLICATION_BASE_URL: ${{ vars.APPLICATION_BASE_URL }}
       APPLICATION_BIND_ADDRESS: ${{ vars.APPLICATION_BIND_ADDRESS || '127.0.0.1' }}
+      PREVIEW_ROUTING_ENABLED: ${{ vars.PREVIEW_ROUTING_ENABLED || 'false' }}
+      PREVIEW_ROUTING_DOMAIN: ${{ vars.PREVIEW_ROUTING_DOMAIN || '127.0.0.1.nip.io' }}
       CALLBACK_TOKEN: ${{ secrets.DEPLOYMENT_CALLBACK_TOKEN }}
     steps:
       - name: Validate sandbox request
@@ -55,6 +57,10 @@ jobs:
             --tmpfs /var/run:rw,noexec,nosuid,size=4m \
             --label "idp.sandbox=true" \
             --label "idp.deployment-id=$DEPLOYMENT_ID" \
+            --label "traefik.enable=$PREVIEW_ROUTING_ENABLED" \
+            --label "traefik.http.routers.idp-sandbox-$DEPLOYMENT_ID.rule=Host(\`$DEPLOYMENT_ID.$PREVIEW_ROUTING_DOMAIN\`)" \
+            --label "traefik.http.routers.idp-sandbox-$DEPLOYMENT_ID.entrypoints=web" \
+            --label "traefik.http.services.idp-sandbox-$DEPLOYMENT_ID.loadbalancer.server.port=$CONTAINER_PORT" \
             -p "$APPLICATION_BIND_ADDRESS:$HOST_PORT:$CONTAINER_PORT" \
             "$SANDBOX_IMAGE"
 

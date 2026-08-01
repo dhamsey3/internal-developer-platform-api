@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 from fastapi import HTTPException
 from sqlalchemy import create_engine
@@ -46,7 +47,7 @@ def test_running_sandbox_logs_are_read_from_docker(monkeypatch):
         assert command == ["docker", "logs", "--tail", "100", "container-101"]
         return SimpleNamespace(returncode=0, stdout="line 1\nline 2\n", stderr="")
 
-    monkeypatch.setattr("api.routes.deployments.subprocess.run", run)
+    monkeypatch.setattr("services.providers.vm_docker.subprocess.run", run)
     try:
         deployment = _deployment(db, metadata={"runtime_id": "container-101", "logs": "persisted"})
 
@@ -55,6 +56,26 @@ def test_running_sandbox_logs_are_read_from_docker(monkeypatch):
         assert result["deployment_id"] == str(deployment.id)
         assert result["logs"] == ["line 1", "line 2"]
         assert "fetched_at" in result
+    finally:
+        db.close()
+        Base.metadata.drop_all(bind=engine)
+        engine.dispose()
+
+
+def test_running_sandbox_logs_use_configured_provider(monkeypatch):
+    engine, db = _session()
+    provider = MagicMock()
+    provider.get_logs.return_value = ["provider line"]
+    monkeypatch.setattr("api.routes.deployments.get_deployment_provider", MagicMock(return_value=provider))
+    try:
+        deployment = _deployment(db, metadata={"provider": "vm_docker"})
+
+        result = get_deployment_logs(deployment.id, db, "")
+
+        assert result["logs"] == ["provider line"]
+        provider.get_logs.assert_called_once()
+        assert provider.get_logs.call_args.args[0].id == deployment.id
+        assert provider.get_logs.call_args.kwargs["tail"] == 100
     finally:
         db.close()
         Base.metadata.drop_all(bind=engine)
@@ -109,7 +130,7 @@ def test_regular_deployment_logs_require_owner_token():
 def test_regular_deployment_logs_allow_owner_token(monkeypatch):
     engine, db = _session()
     monkeypatch.setattr(
-        "api.routes.deployments.subprocess.run",
+        "services.providers.vm_docker.subprocess.run",
         lambda *args, **kwargs: SimpleNamespace(returncode=1, stdout="", stderr=""),
     )
     try:

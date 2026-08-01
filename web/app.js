@@ -147,6 +147,8 @@ function renderSandbox(deployment) {
   elements.sandboxLaunchButton.disabled = status === "queued";
   if (effectiveDeployment?.last_error) {
     elements.sandboxMessage.textContent = effectiveDeployment.last_error;
+  } else if (status === "running" && state.systemReadiness.preview_routing_configured && effectiveDeployment?.url) {
+    elements.sandboxMessage.textContent = "Live preview is ready.";
   } else if (status === "running" && !state.systemReadiness.preview_routing_configured) {
     elements.sandboxMessage.textContent = `Runtime Created (Port :${hostPort}). Preview routing is not configured.`;
   } else if (status === "expired") {

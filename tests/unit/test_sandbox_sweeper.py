@@ -43,7 +43,7 @@ def test_sweeper_expires_stale_sandbox_and_removes_container(monkeypatch):
     engine, db = _session()
     now = datetime.now(timezone.utc)
     run = MagicMock()
-    monkeypatch.setattr("services.sandbox_sweeper.subprocess.run", run)
+    monkeypatch.setattr("services.providers.vm_docker.subprocess.run", run)
     try:
         deployment = _sandbox("running", now - timedelta(minutes=1), deployment_id=7)
         db.add(deployment)
@@ -68,11 +68,33 @@ def test_sweeper_expires_stale_sandbox_and_removes_container(monkeypatch):
         engine.dispose()
 
 
+def test_sweeper_teardown_uses_configured_provider(monkeypatch):
+    engine, db = _session()
+    now = datetime.now(timezone.utc)
+    provider = MagicMock()
+    monkeypatch.setattr("services.sandbox_sweeper.get_deployment_provider", MagicMock(return_value=provider))
+    try:
+        deployment = _sandbox("running", now - timedelta(minutes=1), deployment_id=8)
+        deployment.metadata_json = {"provider": "vm_docker"}
+        db.add(deployment)
+        db.commit()
+
+        count = sweep_expired_sandboxes(db, now=now)
+
+        assert count == 1
+        provider.teardown.assert_called_once()
+        assert provider.teardown.call_args.args[0].id == 8
+    finally:
+        db.close()
+        Base.metadata.drop_all(bind=engine)
+        engine.dispose()
+
+
 def test_sweeper_ignores_unexpired_sandbox(monkeypatch):
     engine, db = _session()
     now = datetime.now(timezone.utc)
     run = MagicMock()
-    monkeypatch.setattr("services.sandbox_sweeper.subprocess.run", run)
+    monkeypatch.setattr("services.providers.vm_docker.subprocess.run", run)
     try:
         deployment = _sandbox("running", now + timedelta(minutes=1))
         db.add(deployment)
@@ -94,7 +116,7 @@ def test_missing_docker_does_not_break_sweeper(monkeypatch):
     engine, db = _session()
     now = datetime.now(timezone.utc)
     run = MagicMock(side_effect=FileNotFoundError)
-    monkeypatch.setattr("services.sandbox_sweeper.subprocess.run", run)
+    monkeypatch.setattr("services.providers.vm_docker.subprocess.run", run)
     try:
         deployment = _sandbox("queued", now - timedelta(minutes=1))
         db.add(deployment)
