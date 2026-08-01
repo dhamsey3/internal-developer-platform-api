@@ -1,6 +1,6 @@
 import json
 import logging
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from uuid import uuid4
 
 import redis
@@ -36,7 +36,7 @@ def enqueue_infrastructure_job(
         "id": job_id,
         "action": action,
         "infrastructure_id": infrastructure_id,
-        "enqueued_at": datetime.now(UTC).isoformat(),
+        "enqueued_at": datetime.now(timezone.utc).isoformat(),
     }
 
     if settings.TERRAFORM_JOB_BACKEND == "background":

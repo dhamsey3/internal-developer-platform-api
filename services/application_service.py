@@ -1,4 +1,4 @@
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from uuid import uuid4
 
@@ -144,8 +144,8 @@ def _parse_timestamp(value: Optional[str]) -> Optional[datetime]:
     except ValueError:
         return None
     if parsed.tzinfo is None:
-        return parsed.replace(tzinfo=UTC)
-    return parsed.astimezone(UTC)
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
 
 
 def mark_stale_application_deployments(
@@ -153,7 +153,7 @@ def mark_stale_application_deployments(
     applications: list[Application],
     now: Optional[datetime] = None,
 ) -> bool:
-    now = now or datetime.now(UTC)
+    now = now or datetime.now(timezone.utc)
     changed = False
     for application in applications:
         if application.status not in ACTIVE_DEPLOYMENT_STATUSES:
@@ -188,7 +188,7 @@ def mark_stale_runtime_deployments(
     deployments: list[Deployment],
     now: Optional[datetime] = None,
 ) -> bool:
-    now = now or datetime.now(UTC)
+    now = now or datetime.now(timezone.utc)
     changed = False
     for deployment in deployments:
         if deployment.status not in ACTIVE_DEPLOYMENT_STATUSES:
@@ -225,7 +225,7 @@ def dispatch_application_deployment(db: Session, application: Application, desti
     if host_port > 65535:
         raise ValueError("No host port is available for this application")
     attempt_id = uuid4().hex
-    requested_at = datetime.now(UTC).isoformat()
+    requested_at = datetime.now(timezone.utc).isoformat()
     response = httpx.post(
         (
             f"https://api.github.com/repos/{settings.GITHUB_REPOSITORY}"

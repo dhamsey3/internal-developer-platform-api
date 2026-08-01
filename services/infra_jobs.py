@@ -39,6 +39,8 @@ def _run_infrastructure_job(
         db.commit()
     except Exception as exc:
         logger.exception("Infrastructure job failed for id %s", infrastructure_id)
+        if db is not None:
+            db.rollback()
         if infra is None:
             infra = db.get(Infrastructure, infrastructure_id)
         if infra is not None:

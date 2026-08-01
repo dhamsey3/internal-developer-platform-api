@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 from unittest.mock import MagicMock
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -463,7 +463,7 @@ def test_stale_application_deployment_is_marked_failed():
             status="queued",
             metadata_json={
                 "deployment_attempt_id": "1" * 32,
-                "deployment_requested_at": (datetime.now(UTC) - timedelta(minutes=45)).isoformat(),
+                "deployment_requested_at": (datetime.now(timezone.utc) - timedelta(minutes=45)).isoformat(),
             },
         )
         db.add_all([destination, application])

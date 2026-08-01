@@ -7,8 +7,13 @@ const state = {
   applications: [],
   workloads: [],
   deploymentPollTimer: null,
+  sandboxPollTimer: null,
+  sandboxCountdownTimer: null,
+  sandboxDeployment: null,
   refreshInFlight: false,
 };
+
+const SANDBOX_HOST = window.SANDBOX_HOST || "localhost";
 
 const elements = Object.fromEntries(
   [
@@ -19,6 +24,8 @@ const elements = Object.fromEntries(
     "repositoryUrl", "port", "environment", "destinationSelect", "selectedDestinationReadiness",
     "applicationReview", "applicationMessage", "cancelCreateButton", "applicationList",
     "refreshButton", "refreshStatus", "workloadList", "logsTarget", "logsOutput",
+    "sandboxTemplate", "sandboxLaunchButton", "sandboxStatus", "sandboxDeploymentId",
+    "sandboxCountdown", "sandboxPort", "sandboxOpenLink", "sandboxMessage",
   ].map((id) => [id, document.querySelector(`#${id}`)])
 );
 
@@ -58,6 +65,123 @@ async function api(path, options = {}) {
 
 function statusClass(status) {
   return `pill status-${escapeHtml(status)}`;
+}
+
+function terminalSandboxStatus(status) {
+  return ["running", "expired", "failed", "stopped"].includes(status);
+}
+
+function sandboxHostPort(deployment) {
+  return deployment?.metadata_json?.host_port || deployment?.port || deployment?.container_port;
+}
+
+function formatDuration(ms) {
+  const totalSeconds = Math.max(0, Math.ceil(ms / 1000));
+  const minutes = String(Math.floor(totalSeconds / 60)).padStart(2, "0");
+  const seconds = String(totalSeconds % 60).padStart(2, "0");
+  return `${minutes}:${seconds}`;
+}
+
+function stopSandboxPoll() {
+  if (state.sandboxPollTimer) {
+    window.clearTimeout(state.sandboxPollTimer);
+    state.sandboxPollTimer = null;
+  }
+}
+
+function stopSandboxCountdown() {
+  if (state.sandboxCountdownTimer) {
+    window.clearInterval(state.sandboxCountdownTimer);
+    state.sandboxCountdownTimer = null;
+  }
+}
+
+function renderSandbox(deployment) {
+  state.sandboxDeployment = deployment;
+  const status = deployment?.status || "idle";
+  elements.sandboxStatus.className = statusClass(status);
+  elements.sandboxStatus.textContent = status.replaceAll("_", " ");
+  elements.sandboxDeploymentId.textContent = deployment?.id ? `#${deployment.id}` : "Not started";
+  const hostPort = sandboxHostPort(deployment);
+  elements.sandboxPort.textContent = hostPort || "Pending";
+
+  if (status === "running" && hostPort) {
+    const url = deployment.url || `http://${SANDBOX_HOST}:${hostPort}`;
+    elements.sandboxOpenLink.href = url;
+    elements.sandboxOpenLink.hidden = false;
+  } else {
+    elements.sandboxOpenLink.hidden = true;
+    elements.sandboxOpenLink.removeAttribute("href");
+  }
+
+  elements.sandboxLaunchButton.disabled = status === "queued";
+  if (deployment?.last_error) {
+    elements.sandboxMessage.textContent = deployment.last_error;
+  }
+}
+
+function tickSandboxCountdown() {
+  const deployment = state.sandboxDeployment;
+  if (!deployment?.expires_at) {
+    elements.sandboxCountdown.textContent = "--:--";
+    return;
+  }
+  const remaining = new Date(deployment.expires_at).getTime() - Date.now();
+  elements.sandboxCountdown.textContent = formatDuration(remaining);
+  if (remaining <= 0 && !["failed", "stopped"].includes(deployment.status)) {
+    renderSandbox({ ...deployment, status: "expired" });
+    stopSandboxPoll();
+    stopSandboxCountdown();
+  }
+}
+
+function startSandboxCountdown() {
+  stopSandboxCountdown();
+  tickSandboxCountdown();
+  state.sandboxCountdownTimer = window.setInterval(tickSandboxCountdown, 1000);
+}
+
+async function pollSandboxDeployment(id) {
+  stopSandboxPoll();
+  try {
+    const deployment = await api(`/deployments/${id}`);
+    renderSandbox(deployment);
+    startSandboxCountdown();
+    if (deployment.status === "queued") {
+      state.sandboxPollTimer = window.setTimeout(() => pollSandboxDeployment(id), 3000);
+    }
+    if (terminalSandboxStatus(deployment.status)) {
+      await loadWorkloads();
+    }
+  } catch (error) {
+    elements.sandboxMessage.textContent = error.message;
+  }
+}
+
+async function handleSandboxLaunch() {
+  stopSandboxPoll();
+  stopSandboxCountdown();
+  elements.sandboxMessage.textContent = "Launching sandbox...";
+  elements.sandboxLaunchButton.disabled = true;
+  elements.sandboxOpenLink.hidden = true;
+  try {
+    const template = elements.sandboxTemplate.value;
+    const deployment = await api(`/sandbox/demo?template=${encodeURIComponent(template)}`, {
+      method: "POST",
+      body: JSON.stringify({ template }),
+    });
+    elements.sandboxMessage.textContent = "";
+    renderSandbox(deployment);
+    startSandboxCountdown();
+    if (deployment.status === "queued") {
+      state.sandboxPollTimer = window.setTimeout(() => pollSandboxDeployment(deployment.id), 3000);
+    }
+    await loadWorkloads();
+  } catch (error) {
+    elements.sandboxMessage.textContent = error.message;
+    elements.sandboxLaunchButton.disabled = false;
+    renderSandbox({ status: "failed" });
+  }
 }
 
 function setMode(mode) {
@@ -420,6 +544,8 @@ elements.authForm.addEventListener("submit", handleAuth);
 elements.logoutButton.addEventListener("click", () => {
   if (state.deploymentPollTimer) window.clearTimeout(state.deploymentPollTimer);
   state.deploymentPollTimer = null;
+  stopSandboxPoll();
+  stopSandboxCountdown();
   state.token = "";
   state.currentUser = null;
   localStorage.removeItem("idp_token");
@@ -438,6 +564,7 @@ document.querySelectorAll('input[name="sourceType"]').forEach((input) => input.a
 elements.refreshButton.addEventListener("click", () => refreshDashboard());
 elements.workloadList.addEventListener("click", handleWorkloadAction);
 elements.applicationList.addEventListener("click", handleApplicationAction);
+elements.sandboxLaunchButton.addEventListener("click", handleSandboxLaunch);
 
 setSignedIn(Boolean(state.token));
 loadCatalog().catch(() => {});

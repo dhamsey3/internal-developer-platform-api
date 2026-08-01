@@ -1,0 +1,122 @@
+name: Deploy Sandbox
+
+on:
+  repository_dispatch:
+    types: [deploy_sandbox]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sandbox-${{ github.event.client_payload.deployment_id }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Deploy transient sandbox
+    runs-on: [self-hosted, linux, idp-vm]
+    timeout-minutes: 20
+    env:
+      DEPLOYMENT_ID: ${{ github.event.client_payload.deployment_id }}
+      SANDBOX_NAME: ${{ github.event.client_payload.name }}
+      SANDBOX_IMAGE: ${{ github.event.client_payload.image }}
+      CONTAINER_PORT: ${{ github.event.client_payload.container_port }}
+      HOST_PORT: ${{ github.event.client_payload.host_port }}
+      TTL_SECONDS: ${{ github.event.client_payload.ttl_seconds }}
+      IDP_API_URL: ${{ vars.IDP_API_URL }}
+      APPLICATION_BASE_URL: ${{ vars.APPLICATION_BASE_URL }}
+      APPLICATION_BIND_ADDRESS: ${{ vars.APPLICATION_BIND_ADDRESS || '127.0.0.1' }}
+      CALLBACK_TOKEN: ${{ secrets.DEPLOYMENT_CALLBACK_TOKEN }}
+    steps:
+      - name: Validate sandbox request
+        run: |
+          [[ "$DEPLOYMENT_ID" =~ ^[0-9]+$ ]]
+          [[ "$SANDBOX_NAME" =~ ^sandbox-[a-z0-9-]+-[0-9]+$ ]]
+          [[ "$SANDBOX_IMAGE" =~ ^(mpepping/whoami:latest|nginx:1\.25-alpine)$ ]]
+          [[ "$CONTAINER_PORT" =~ ^[0-9]+$ ]] && (( CONTAINER_PORT >= 1 && CONTAINER_PORT <= 65535 ))
+          [[ "$HOST_PORT" =~ ^[0-9]+$ ]] && (( HOST_PORT >= 20000 && HOST_PORT <= 65535 ))
+          [[ "$TTL_SECONDS" =~ ^[0-9]+$ ]] && (( TTL_SECONDS > 0 && TTL_SECONDS <= 900 ))
+          [[ "$APPLICATION_BIND_ADDRESS" =~ ^[0-9.]+$ ]]
+          test -n "$IDP_API_URL"
+          test -n "$CALLBACK_TOKEN"
+
+      - name: Start sandbox container
+        run: |
+          container_name="idp-$SANDBOX_NAME"
+          docker pull "$SANDBOX_IMAGE"
+          docker rm --force "$container_name" >/dev/null 2>&1 || true
+          docker run -d \
+            --name "$container_name" \
+            --memory 256m \
+            --cpus 0.5 \
+            --read-only \
+            --tmpfs /tmp:rw,noexec,nosuid,size=16m \
+            --tmpfs /var/cache/nginx:rw,noexec,nosuid,size=16m \
+            --tmpfs /var/run:rw,noexec,nosuid,size=4m \
+            --label "idp.sandbox=true" \
+            --label "idp.deployment-id=$DEPLOYMENT_ID" \
+            -p "$APPLICATION_BIND_ADDRESS:$HOST_PORT:$CONTAINER_PORT" \
+            "$SANDBOX_IMAGE"
+
+          health_host="$APPLICATION_BIND_ADDRESS"
+          if [ "$health_host" = "0.0.0.0" ]; then
+            health_host="127.0.0.1"
+          fi
+          health_url="http://$health_host:$HOST_PORT/health"
+          root_url="http://$health_host:$HOST_PORT/"
+          for attempt in {1..20}; do
+            if curl --fail --silent "$health_url" >/dev/null; then
+              echo "$health_url" > "$RUNNER_TEMP/sandbox-health-url"
+              exit 0
+            fi
+            if curl --fail --silent "$root_url" >/dev/null; then
+              echo "$root_url" > "$RUNNER_TEMP/sandbox-health-url"
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs --tail 100 "$container_name" > "$RUNNER_TEMP/sandbox-failure.log" 2>&1 || true
+          exit 1
+
+      - name: Report sandbox running
+        run: |
+          container_name="idp-$SANDBOX_NAME"
+          runtime_id="$(docker inspect --format '{{.Id}}' "$container_name" 2>/dev/null || true)"
+          logs="$(docker logs --tail 80 "$container_name" 2>&1 | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()[-4000:]))')"
+          application_url=""
+          if [ -n "$APPLICATION_BASE_URL" ]; then
+            application_url="${APPLICATION_BASE_URL%/}:$HOST_PORT"
+          fi
+          payload=$(printf '{"status":"running","url":"%s","host_port":%s,"runtime_id":"%s","logs":%s}' \
+            "$application_url" "$HOST_PORT" "$runtime_id" "$logs")
+          curl --fail --silent --show-error \
+            -X PATCH "$IDP_API_URL/deployments/$DEPLOYMENT_ID" \
+            -H "Content-Type: application/json" \
+            -H "X-Deployment-Token: $CALLBACK_TOKEN" \
+            -d "$payload"
+
+      - name: Keep sandbox alive until TTL
+        run: sleep "$TTL_SECONDS"
+
+      - name: Teardown sandbox
+        if: always()
+        run: |
+          container_name="idp-$SANDBOX_NAME"
+          docker logs --tail 100 "$container_name" > "$RUNNER_TEMP/sandbox-final.log" 2>&1 || true
+          docker rm --force "$container_name" >/dev/null 2>&1 || true
+          docker image prune --force --filter "until=24h" >/dev/null 2>&1 || true
+
+          final_status="expired"
+          final_error=""
+          if [ "${{ job.status }}" != "success" ]; then
+            final_status="failed"
+            final_error="Sandbox workflow failed before normal expiration"
+          fi
+          logs="$(cat "$RUNNER_TEMP/sandbox-final.log" "$RUNNER_TEMP/sandbox-failure.log" 2>/dev/null | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()[-4000:]))')"
+          payload=$(printf '{"status":"%s","host_port":%s,"error":"%s","logs":%s}' \
+            "$final_status" "$HOST_PORT" "$final_error" "$logs")
+          curl --fail --silent --show-error \
+            -X PATCH "$IDP_API_URL/deployments/$DEPLOYMENT_ID" \
+            -H "Content-Type: application/json" \
+            -H "X-Deployment-Token: $CALLBACK_TOKEN" \
+            -d "$payload"

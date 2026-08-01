@@ -75,6 +75,9 @@ source .venv/bin/activate
 pip install -r requirements.txt
 uvicorn app.main:app --reload
 
+# If venv creation fails on Debian/Ubuntu:
+# sudo apt install python3-venv
+
 # 4. Open the dashboard
 open http://127.0.0.1:8000/dashboard/
 
@@ -84,13 +87,41 @@ open http://127.0.0.1:8000/docs
 
 ---
 
+## Running tests locally
+
+To run the unit tests locally in an isolated virtual environment, follow these steps:
+
+```bash
+# create a virtual environment (Debian/Ubuntu: install python3-venv if this fails)
+python3 -m venv .venv
+
+# activate and install test dependencies
+source .venv/bin/activate
+pip install --upgrade pip setuptools wheel
+pip install -r requirements.txt
+
+# run the test suite
+python -m pytest -q
+```
+
+If `python3 -m venv` fails with an error about `ensurepip` or similar, install the OS package first on Debian/Ubuntu:
+
+```bash
+sudo apt update && sudo apt install python3-venv
+```
+
+If you cannot use `sudo` on your machine, the repository includes a GitHub Actions workflow that runs the same test matrix on push and pull requests.
+
+
 ## Prerequisites
 
-- **Python** 3.9 or later
+- **Python** 3.9 or later with `venv` support
 - **Docker** (for containerized deployments)
 - **Kubernetes** 1.24+ (optional, for local development use dry-run mode)
 - **Terraform** 1.0+ (optional, for infrastructure provisioning)
 - **PostgreSQL** or **SQLite** (SQLite for local development)
+
+> On Debian/Ubuntu, install `python3-venv` if `python3 -m venv` is unavailable.
 
 ---
 

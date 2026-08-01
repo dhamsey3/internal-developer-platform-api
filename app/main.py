@@ -1,4 +1,6 @@
+import asyncio
 import shutil
+from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI
 from fastapi import HTTPException
@@ -8,14 +10,39 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from api.routes import applications, auth, catalog, deployments, destinations, infrastructure, kubernetes, monitoring
+from api.routes import sandbox
 from auth.rate_limit import rate_limiter
 from app.config import settings
 from app.logger import setup_logging
 from app.security import SecurityHeadersMiddleware
 from database.session import SessionLocal, init_db
 from services.destination_service import seed_destinations
+from services.sandbox_sweeper import sandbox_sweeper_loop
 
 setup_logging()
+
+
+def startup_tasks():
+    init_db()
+    db = SessionLocal()
+    try:
+        seed_destinations(db)
+    finally:
+        db.close()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    startup_tasks()
+    sweeper_task = asyncio.create_task(sandbox_sweeper_loop())
+    try:
+        yield
+    finally:
+        sweeper_task.cancel()
+        try:
+            await sweeper_task
+        except asyncio.CancelledError:
+            pass
 
 
 app = FastAPI(
@@ -26,6 +53,7 @@ app = FastAPI(
         "destinations, and runtime operations."
     ),
     debug=settings.DEBUG,
+    lifespan=lifespan,
 )
 
 app.add_middleware(SecurityHeadersMiddleware)
@@ -36,16 +64,6 @@ app.add_middleware(
     allow_methods=["GET", "POST", "DELETE"],
     allow_headers=["Authorization", "Content-Type"],
 )
-
-
-@app.on_event("startup")
-def on_startup():
-    init_db()
-    db = SessionLocal()
-    try:
-        seed_destinations(db)
-    finally:
-        db.close()
 
 
 app.include_router(auth.router, prefix="/auth", tags=["auth"], dependencies=[Depends(rate_limiter)])
@@ -73,6 +91,7 @@ app.include_router(
     tags=["deployments"],
     dependencies=[Depends(rate_limiter)],
 )
+app.include_router(sandbox.router, prefix="/sandbox", tags=["sandbox"], dependencies=[Depends(rate_limiter)])
 app.include_router(catalog.router, prefix="/catalog", tags=["catalog"], dependencies=[Depends(rate_limiter)])
 app.include_router(kubernetes.router, prefix="/kubernetes", tags=["kubernetes"], dependencies=[Depends(rate_limiter)])
 app.include_router(monitoring.router, prefix="/monitoring", tags=["monitoring"], dependencies=[Depends(rate_limiter)])

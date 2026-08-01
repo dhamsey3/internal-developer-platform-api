@@ -14,6 +14,7 @@
       </div>
       <nav class="topnav" aria-label="Primary">
         <a class="active" href="#applications">Applications</a>
+        <a href="#sandbox">Sandbox</a>
         <a href="#destinations">Destinations</a>
         <a href="#operations">Operations</a>
       </nav>
@@ -183,6 +184,44 @@
 
           <div id="applicationList" class="application-list">
             <p class="meta">Sign in to view applications.</p>
+          </div>
+        </section>
+
+        <section id="sandbox" class="workspace-section">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Instant sandbox</p>
+              <h2>Demo Mode</h2>
+            </div>
+            <span id="sandboxStatus" class="pill">idle</span>
+          </div>
+          <div class="sandbox-panel">
+            <div class="sandbox-controls">
+              <label>
+                Template
+                <select id="sandboxTemplate">
+                  <option value="whoami">whoami</option>
+                  <option value="nginx">nginx</option>
+                </select>
+              </label>
+              <button id="sandboxLaunchButton" type="button">Launch sandbox</button>
+            </div>
+            <div id="sandboxRuntime" class="sandbox-runtime">
+              <div>
+                <span class="meta">Deployment</span>
+                <strong id="sandboxDeploymentId">Not started</strong>
+              </div>
+              <div>
+                <span class="meta">Expires in</span>
+                <strong id="sandboxCountdown">--:--</strong>
+              </div>
+              <div>
+                <span class="meta">Port</span>
+                <strong id="sandboxPort">Pending</strong>
+              </div>
+              <a id="sandboxOpenLink" class="launch-link" href="#" target="_blank" rel="noopener noreferrer" hidden>Open preview</a>
+            </div>
+            <p id="sandboxMessage" class="message"></p>
           </div>
         </section>
 

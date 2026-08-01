@@ -406,6 +406,54 @@ label {
   margin-top: 16px;
 }
 
+.sandbox-panel {
+  display: grid;
+  gap: 14px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  padding: 16px;
+}
+
+.sandbox-controls {
+  display: grid;
+  grid-template-columns: minmax(180px, 280px) auto;
+  align-items: end;
+  gap: 12px;
+}
+
+.sandbox-runtime {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
+  align-items: end;
+  gap: 12px;
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}
+
+.sandbox-runtime > div {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.launch-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  border: 1px solid var(--primary);
+  border-radius: 6px;
+  background: var(--primary);
+  color: #fff;
+  font-weight: 800;
+  padding: 8px 13px;
+  text-decoration: none;
+}
+
+.launch-link:hover {
+  background: var(--primary-dark);
+}
+
 .application-list {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
@@ -562,7 +610,9 @@ pre {
 
   .summary-strip,
   .form-grid,
-  .review-grid {
+  .review-grid,
+  .sandbox-controls,
+  .sandbox-runtime {
     grid-template-columns: 1fr;
   }
 

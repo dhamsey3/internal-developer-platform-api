@@ -146,16 +146,37 @@ class DeploymentResponse(BaseModel):
     namespace: str
     image: str
     port: int
+    container_port: int = 80
     replicas: int
     ingress_host: Optional[str] = None
     url: Optional[str] = None
     status: str
+    expires_at: Optional[datetime] = None
+    is_sandbox: bool = False
     metadata_json: Dict[str, Any] = {}
     last_error: Optional[str] = None
     created_at: datetime
 
     class Config:
         orm_mode = True
+
+
+class SandboxDemoRequest(BaseModel):
+    template: str = Field(..., regex=r"^[a-z0-9-]+$")
+
+
+class SandboxDemoResponse(DeploymentResponse):
+    template: str
+    ttl_seconds: int
+
+
+class DeploymentStatusPatch(BaseModel):
+    status: str = Field(..., regex=r"^(deploying|running|failed|expired|stopped)$")
+    url: Optional[str] = Field(default=None, max_length=500)
+    host_port: Optional[int] = Field(default=None, ge=1, le=65535)
+    runtime_id: Optional[str] = Field(default=None, max_length=255)
+    logs: Optional[str] = Field(default=None, max_length=4000)
+    error: Optional[str] = Field(default=None, max_length=2000)
 
 
 class NamespaceRequest(BaseModel):
