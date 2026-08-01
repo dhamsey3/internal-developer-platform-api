@@ -222,11 +222,14 @@ function renderWorkloads(workloads) {
       <div>
         <strong>${escapeHtml(workload.name)}</strong>
         <span class="meta">${escapeHtml(workload.image)} · ${escapeHtml(workload.namespace)}</span>
+        ${workload.url
+          ? `<a href="${escapeHtml(workload.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(workload.url)}</a>`
+          : ""}
       </div>
       <span class="${statusClass(workload.status)}">${escapeHtml(workload.status)}</span>
       <div class="row-actions">
         <button class="ghost" type="button" data-action="status" data-id="${workload.id}">Status</button>
-        <button class="ghost" type="button" data-action="logs" data-name="${escapeHtml(workload.name)}" data-namespace="${escapeHtml(workload.namespace)}">Logs</button>
+        <button class="ghost" type="button" data-action="logs" data-id="${workload.id}" data-name="${escapeHtml(workload.name)}" data-namespace="${escapeHtml(workload.namespace)}">Logs</button>
       </div>
     </div>
   `).join("");
@@ -335,11 +338,17 @@ async function handleWorkloadAction(event) {
       elements.logsTarget.textContent = workload.name;
       elements.logsOutput.textContent = JSON.stringify(workload, null, 2);
     } else {
-      elements.logsTarget.textContent = `${button.dataset.namespace}/${button.dataset.name}`;
-      const result = await api(
-        `/monitoring/logs/${encodeURIComponent(button.dataset.name)}?namespace=${encodeURIComponent(button.dataset.namespace)}`
-      );
-      elements.logsOutput.textContent = result.logs;
+      const workload = state.workloads.find((item) => item.id === Number(button.dataset.id));
+      if (workload?.metadata_json?.runtime === "linux_docker") {
+        elements.logsTarget.textContent = workload.name;
+        elements.logsOutput.textContent = workload.metadata_json.logs || "No runtime logs have been reported yet.";
+      } else {
+        elements.logsTarget.textContent = `${button.dataset.namespace}/${button.dataset.name}`;
+        const result = await api(
+          `/monitoring/logs/${encodeURIComponent(button.dataset.name)}?namespace=${encodeURIComponent(button.dataset.namespace)}`
+        );
+        elements.logsOutput.textContent = result.logs;
+      }
     }
   } catch (error) {
     elements.logsOutput.textContent = error.message;

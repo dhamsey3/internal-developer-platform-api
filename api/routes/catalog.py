@@ -4,6 +4,21 @@ router = APIRouter()
 
 APP_TEMPLATES = [
     {
+        "id": "deploy-demo-app",
+        "name": "Deploy Demo App",
+        "description": (
+            "Tiny public whoami service with root and /health endpoints for "
+            "validating the deployment lifecycle."
+        ),
+        "default_app_name": "idp-demo",
+        "image": "mpepping/whoami:latest",
+        "port": 8000,
+        "replicas": 1,
+        "min_replicas": 1,
+        "max_replicas": 1,
+        "cpu_threshold": 70,
+    },
+    {
         "id": "nginx-web",
         "name": "Nginx web app",
         "description": "Official nginx image pinned to a stable tag for a tiny static web app.",
@@ -66,6 +81,7 @@ APP_TEMPLATES = [
 ]
 
 IMAGE_CATALOG = [
+    {"label": "IDP demo app", "image": "mpepping/whoami:latest", "port": 8000},
     {"label": "nginx 1.25 alpine", "image": "nginx:1.25-alpine", "port": 80},
     {"label": "httpd 2.4", "image": "httpd:2.4", "port": 80},
     {"label": "traefik whoami", "image": "traefik/whoami:v1.10", "port": 80},

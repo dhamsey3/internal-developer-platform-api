@@ -10,7 +10,12 @@ from api.schemas import ApplicationCreateRequest, ApplicationDeploymentCallback,
 from auth.rbac import get_current_user
 from database.models import Application, Destination, User
 from database.session import get_db
-from services.application_service import create_application, dispatch_application_deployment
+from services.application_service import (
+    create_application,
+    dispatch_application_deployment,
+    mark_stale_application_deployments,
+    upsert_application_runtime_deployment,
+)
 from services.destination_service import destination_readiness
 
 router = APIRouter()
@@ -58,6 +63,14 @@ def list_applications(
         .order_by(Application.created_at.desc())
         .all()
     )
+    if mark_stale_application_deployments(db, applications):
+        db.commit()
+        applications = (
+            db.query(Application)
+            .filter(Application.owner_id == current_user.id)
+            .order_by(Application.created_at.desc())
+            .all()
+        )
     destinations = {
         destination.id: destination
         for destination in db.query(Destination)
@@ -98,7 +111,7 @@ def deploy_application_route(
         raise HTTPException(status_code=409, detail="Repository builds are not configured yet")
     destination = db.query(Destination).filter(Destination.id == application.destination_id).one()
     try:
-        dispatch_application_deployment(application, destination)
+        dispatch_application_deployment(db, application, destination)
     except (ValueError, RuntimeError) as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     db.add(application)
@@ -124,12 +137,29 @@ def application_deployment_callback(
         raise HTTPException(status_code=404, detail="Application not found")
     destination = db.query(Destination).filter(Destination.id == application.destination_id).one()
     metadata = application.metadata_json or {}
+    expected_attempt_id = metadata.get("deployment_attempt_id")
+    if expected_attempt_id and callback.attempt_id != expected_attempt_id:
+        raise HTTPException(status_code=409, detail="Deployment callback does not match the active attempt")
     application.status = callback.status
     application.metadata_json = {
         **metadata,
         "url": callback.url,
         "last_error": callback.error,
+        "runtime_id": callback.runtime_id,
+        "health_url": callback.health_url,
+        "logs": callback.logs,
     }
+    upsert_application_runtime_deployment(
+        db,
+        application,
+        destination,
+        callback.status,
+        url=callback.url,
+        error=callback.error,
+        runtime_id=callback.runtime_id,
+        health_url=callback.health_url,
+        logs=callback.logs,
+    )
     db.add(application)
     db.commit()
     db.refresh(application)
