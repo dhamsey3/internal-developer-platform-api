@@ -79,6 +79,10 @@ function sandboxHostPort(deployment) {
   return deployment?.metadata_json?.host_port || deployment?.port || deployment?.container_port;
 }
 
+function sandboxIsExpired(deployment) {
+  return Boolean(deployment?.expires_at && new Date(deployment.expires_at).getTime() <= Date.now());
+}
+
 function workloadHostPort(workload) {
   return workload?.metadata_json?.host_port || workload?.port;
 }
@@ -114,17 +118,19 @@ function stopSandboxCountdown() {
 }
 
 function renderSandbox(deployment) {
-  state.sandboxDeployment = deployment;
-  const status = deployment?.status || "idle";
+  const effectiveDeployment = deployment && sandboxIsExpired(deployment) && !["failed", "stopped"].includes(deployment.status)
+    ? { ...deployment, status: "expired" }
+    : deployment;
+  state.sandboxDeployment = effectiveDeployment;
+  const status = effectiveDeployment?.status || "idle";
   elements.sandboxStatus.className = statusClass(status);
   elements.sandboxStatus.textContent = status.replaceAll("_", " ");
-  elements.sandboxDeploymentId.textContent = deployment?.id ? `#${deployment.id}` : "Not started";
-  const hostPort = sandboxHostPort(deployment);
+  elements.sandboxDeploymentId.textContent = effectiveDeployment?.id ? `#${effectiveDeployment.id}` : "Not started";
+  const hostPort = sandboxHostPort(effectiveDeployment);
   elements.sandboxPort.textContent = hostPort || "Pending";
 
-  if (status === "running" && hostPort) {
-    const url = deployment.url || `http://${SANDBOX_HOST}:${hostPort}`;
-    elements.sandboxOpenLink.href = url;
+  if (status === "running" && effectiveDeployment?.url) {
+    elements.sandboxOpenLink.href = effectiveDeployment.url;
     elements.sandboxOpenLink.hidden = false;
   } else {
     elements.sandboxOpenLink.hidden = true;
@@ -132,8 +138,12 @@ function renderSandbox(deployment) {
   }
 
   elements.sandboxLaunchButton.disabled = status === "queued";
-  if (deployment?.last_error) {
-    elements.sandboxMessage.textContent = deployment.last_error;
+  if (effectiveDeployment?.last_error) {
+    elements.sandboxMessage.textContent = effectiveDeployment.last_error;
+  } else if (status === "running" && !effectiveDeployment?.url) {
+    elements.sandboxMessage.textContent = "Sandbox is running, but no public preview URL is configured for this VM.";
+  } else if (status === "expired") {
+    elements.sandboxMessage.textContent = "Sandbox expired and the preview container was removed.";
   }
 }
 
@@ -145,7 +155,7 @@ function tickSandboxCountdown() {
   }
   const remaining = new Date(deployment.expires_at).getTime() - Date.now();
   elements.sandboxCountdown.textContent = formatDuration(remaining);
-  if (remaining <= 0 && !["failed", "stopped"].includes(deployment.status)) {
+  if (remaining <= 0 && !["expired", "failed", "stopped"].includes(deployment.status)) {
     renderSandbox({ ...deployment, status: "expired" });
     stopSandboxPoll();
     stopSandboxCountdown();
