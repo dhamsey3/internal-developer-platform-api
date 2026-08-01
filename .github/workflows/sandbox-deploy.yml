@@ -80,7 +80,7 @@ jobs:
 
       - name: Report sandbox running
         run: |
-          container_name="idp-$SANDBOX_NAME"
+          container_name="$DEPLOYMENT_ID"
           runtime_id="$(docker inspect --format '{{.Id}}' "$container_name" 2>/dev/null || true)"
           logs="$(docker logs --tail 80 "$container_name" 2>&1 | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()[-4000:]))')"
           application_url=""
