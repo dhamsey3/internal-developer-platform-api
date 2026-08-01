@@ -54,6 +54,10 @@ async function api(path, options = {}) {
   const contentType = response.headers.get("content-type") || "";
   const payload = contentType.includes("application/json") ? await response.json() : await response.text();
   if (!response.ok) {
+    if (typeof payload === "string" && contentType.includes("text/html")) {
+      const title = payload.match(/<title>(.*?)<\/title>/i)?.[1]?.replace(/\s+/g, " ").trim();
+      throw new Error(title || `Request failed with HTTP ${response.status}`);
+    }
     const detail = payload.detail || payload || "Request failed";
     if (Array.isArray(detail)) {
       throw new Error(detail.map((item) => `${item.loc?.at(-1) || "request"}: ${item.msg}`).join(". "));
