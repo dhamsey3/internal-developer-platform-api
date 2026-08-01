@@ -35,10 +35,10 @@ jobs:
       - name: Lint
         run: |
           pip install flake8
-          flake8 app api auth database services tests --max-line-length=120
+          flake8 app api auth database services tests --max-line-length=120 --jobs=1
       - name: Run tests
         run: |
-          pytest
+          pytest -q
       - name: Build Docker image
         run: |
           docker build -t idp-api:${{ github.sha }} .
