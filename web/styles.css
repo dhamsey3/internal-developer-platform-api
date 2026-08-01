@@ -263,8 +263,7 @@ label {
   gap: 10px;
 }
 
-.destination-row,
-.workload-row {
+.destination-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -272,7 +271,7 @@ label {
 }
 
 .destination-row > div,
-.workload-row > div:first-child {
+.workload-main {
   display: grid;
   min-width: 0;
   gap: 3px;
@@ -516,12 +515,39 @@ dd {
 }
 
 .workload-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
   padding: 11px 13px;
   border-bottom: 1px solid var(--line);
 }
 
 .workload-row:last-child {
   border-bottom: 0;
+}
+
+.workload-title,
+.workload-facts,
+.workload-links {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.workload-facts span {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 12px;
+  padding: 2px 7px;
+}
+
+.workload-links a {
+  color: var(--primary-dark);
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .log-viewer {
@@ -635,6 +661,6 @@ pre {
 
   .workload-row {
     align-items: flex-start;
-    flex-wrap: wrap;
+    grid-template-columns: 1fr;
   }
 }

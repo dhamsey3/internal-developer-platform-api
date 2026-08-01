@@ -75,6 +75,19 @@ function sandboxHostPort(deployment) {
   return deployment?.metadata_json?.host_port || deployment?.port || deployment?.container_port;
 }
 
+function workloadHostPort(workload) {
+  return workload?.metadata_json?.host_port || workload?.port;
+}
+
+function shortRuntimeId(workload) {
+  const runtimeId = workload?.metadata_json?.runtime_id || "";
+  return runtimeId ? runtimeId.slice(0, 12) : "Not reported";
+}
+
+function workloadHealthUrl(workload) {
+  return workload?.metadata_json?.health_url || "";
+}
+
 function formatDuration(ms) {
   const totalSeconds = Math.max(0, Math.ceil(ms / 1000));
   const minutes = String(Math.floor(totalSeconds / 60)).padStart(2, "0");
@@ -338,25 +351,44 @@ function renderWorkloads(workloads) {
   const running = workloads.filter((workload) => workload.status === "running").length;
   elements.workloadCount.textContent = `${running} running`;
   if (!workloads.length) {
-    elements.workloadList.innerHTML = '<p class="empty-state">No runtime workloads are connected.</p>';
+    elements.workloadList.innerHTML = state.token
+      ? '<p class="empty-state">No runtime workloads are connected.</p>'
+      : '<p class="empty-state">Sign in to inspect runtime workloads.</p>';
     return;
   }
-  elements.workloadList.innerHTML = workloads.map((workload) => `
-    <div class="workload-row">
-      <div>
-        <strong>${escapeHtml(workload.name)}</strong>
-        <span class="meta">${escapeHtml(workload.image)} · ${escapeHtml(workload.namespace)}</span>
-        ${workload.url
-          ? `<a href="${escapeHtml(workload.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(workload.url)}</a>`
-          : ""}
+  elements.workloadList.innerHTML = workloads.map((workload) => {
+    const hostPort = workloadHostPort(workload);
+    const healthUrl = workloadHealthUrl(workload);
+    const logs = workload.metadata_json?.logs;
+    return `
+      <div class="workload-row">
+        <div class="workload-main">
+          <div class="workload-title">
+            <strong>${escapeHtml(workload.name)}</strong>
+            <span class="${statusClass(workload.status)}">${escapeHtml(workload.status.replaceAll("_", " "))}</span>
+          </div>
+          <span class="meta">${escapeHtml(workload.image)} · ${escapeHtml(workload.namespace)}</span>
+          <div class="workload-facts">
+            <span>Runtime ${escapeHtml(shortRuntimeId(workload))}</span>
+            <span>Port ${escapeHtml(hostPort || "pending")}</span>
+            <span>${logs ? "Logs reported" : "No logs yet"}</span>
+          </div>
+          <div class="workload-links">
+            ${workload.url
+              ? `<a href="${escapeHtml(workload.url)}" target="_blank" rel="noopener noreferrer">Open URL</a>`
+              : '<span class="meta">URL pending</span>'}
+            ${healthUrl
+              ? `<a href="${escapeHtml(healthUrl)}" target="_blank" rel="noopener noreferrer">Health</a>`
+              : ""}
+          </div>
+        </div>
+        <div class="row-actions">
+          <button class="ghost" type="button" data-action="status" data-id="${workload.id}">Status</button>
+          <button class="ghost" type="button" data-action="logs" data-id="${workload.id}" data-name="${escapeHtml(workload.name)}" data-namespace="${escapeHtml(workload.namespace)}">Logs</button>
+        </div>
       </div>
-      <span class="${statusClass(workload.status)}">${escapeHtml(workload.status)}</span>
-      <div class="row-actions">
-        <button class="ghost" type="button" data-action="status" data-id="${workload.id}">Status</button>
-        <button class="ghost" type="button" data-action="logs" data-id="${workload.id}" data-name="${escapeHtml(workload.name)}" data-namespace="${escapeHtml(workload.namespace)}">Logs</button>
-      </div>
-    </div>
-  `).join("");
+    `;
+  }).join("");
 }
 
 async function loadWorkloads() {
@@ -504,6 +536,13 @@ async function loadApiHealth() {
   }
 }
 
+function updateActiveNav() {
+  const hash = window.location.hash || "#applications";
+  document.querySelectorAll(".topnav a").forEach((link) => {
+    link.classList.toggle("active", link.getAttribute("href") === hash);
+  });
+}
+
 async function refreshDashboard(announce = true) {
   if (!state.token || state.refreshInFlight) return;
   state.refreshInFlight = true;
@@ -565,8 +604,10 @@ elements.refreshButton.addEventListener("click", () => refreshDashboard());
 elements.workloadList.addEventListener("click", handleWorkloadAction);
 elements.applicationList.addEventListener("click", handleApplicationAction);
 elements.sandboxLaunchButton.addEventListener("click", handleSandboxLaunch);
+window.addEventListener("hashchange", updateActiveNav);
 
 setSignedIn(Boolean(state.token));
+updateActiveNav();
 loadCatalog().catch(() => {});
 loadApiHealth();
 if (state.token) {
