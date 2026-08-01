@@ -207,7 +207,7 @@ The `home-vm` destination deploys container-image applications through the dedic
 
 One-time operator setup:
 
-1. Create a fine-grained GitHub token limited to this repository with **Actions: write**, which GitHub requires for workflow dispatch events.
+1. Create a fine-grained GitHub token limited to this repository with **Actions: write** for application workflow dispatch and **Contents: read/write** for sandbox repository dispatch.
 2. Generate a separate callback token, for example `openssl rand -hex 32`.
 3. Add the fine-grained token as the GitHub Actions secret `IDP_GITHUB_DISPATCH_TOKEN`.
 4. Add the callback value as the separate GitHub Actions secret `DEPLOYMENT_CALLBACK_TOKEN`.

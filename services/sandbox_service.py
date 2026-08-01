@@ -93,6 +93,9 @@ def dispatch_sandbox_deployment(deployment: Deployment) -> None:
     )
     if response.status_code != 204:
         detail = response.text[:500] if response.text else "no response body"
+        accepted_permissions = response.headers.get("x-accepted-github-permissions")
+        if accepted_permissions:
+            detail = f"{detail} Required permissions: {accepted_permissions}"
         raise RuntimeError(
             f"GitHub rejected the sandbox dispatch with status {response.status_code}: {detail}"
         )
