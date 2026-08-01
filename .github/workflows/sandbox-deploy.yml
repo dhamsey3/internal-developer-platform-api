@@ -95,23 +95,48 @@ jobs:
             -H "X-Deployment-Token: $CALLBACK_TOKEN" \
             -d "$payload"
 
-      - name: Keep sandbox alive until TTL
-        run: sleep "$TTL_SECONDS"
+      - name: Schedule sandbox teardown
+        run: |
+          cleanup_script="/tmp/idp-sandbox-cleanup-$DEPLOYMENT_ID.sh"
+          cleanup_log="/tmp/idp-sandbox-cleanup-$DEPLOYMENT_ID.log"
+          cat > "$cleanup_script" <<'SCRIPT'
+          #!/usr/bin/env bash
+          set +e
+          sleep "$TTL_SECONDS"
+          container_name="idp-$SANDBOX_NAME"
+          final_log="/tmp/idp-sandbox-final-$DEPLOYMENT_ID.log"
+          docker logs --tail 100 "$container_name" > "$final_log" 2>&1 || true
+          docker rm --force "$container_name" >/dev/null 2>&1 || true
+          docker image prune --force --filter "until=24h" >/dev/null 2>&1 || true
+          logs="$(cat "$final_log" 2>/dev/null | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()[-4000:]))')"
+          payload=$(printf '{"status":"expired","host_port":%s,"logs":%s}' "$HOST_PORT" "$logs")
+          curl --fail --silent --show-error \
+            -X PATCH "$IDP_API_URL/deployments/$DEPLOYMENT_ID" \
+            -H "Content-Type: application/json" \
+            -H "X-Deployment-Token: $CALLBACK_TOKEN" \
+            -d "$payload"
+          rm -f "$final_log" "$0"
+          SCRIPT
+          chmod 700 "$cleanup_script"
+          nohup env \
+            DEPLOYMENT_ID="$DEPLOYMENT_ID" \
+            SANDBOX_NAME="$SANDBOX_NAME" \
+            HOST_PORT="$HOST_PORT" \
+            TTL_SECONDS="$TTL_SECONDS" \
+            IDP_API_URL="$IDP_API_URL" \
+            CALLBACK_TOKEN="$CALLBACK_TOKEN" \
+            bash "$cleanup_script" > "$cleanup_log" 2>&1 &
 
       - name: Teardown sandbox
-        if: always()
+        if: failure() || cancelled()
         run: |
           container_name="idp-$SANDBOX_NAME"
           docker logs --tail 100 "$container_name" > "$RUNNER_TEMP/sandbox-final.log" 2>&1 || true
           docker rm --force "$container_name" >/dev/null 2>&1 || true
           docker image prune --force --filter "until=24h" >/dev/null 2>&1 || true
 
-          final_status="expired"
-          final_error=""
-          if [ "${{ job.status }}" != "success" ]; then
-            final_status="failed"
-            final_error="Sandbox workflow failed before normal expiration"
-          fi
+          final_status="failed"
+          final_error="Sandbox workflow failed before scheduling normal expiration"
           logs="$(cat "$RUNNER_TEMP/sandbox-final.log" "$RUNNER_TEMP/sandbox-failure.log" 2>/dev/null | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()[-4000:]))')"
           payload=$(printf '{"status":"%s","host_port":%s,"error":"%s","logs":%s}' \
             "$final_status" "$HOST_PORT" "$final_error" "$logs")
