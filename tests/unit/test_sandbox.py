@@ -6,6 +6,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from api.routes.deployments import patch_deployment_status
+from api.routes.sandbox import create_sandbox_demo
 from api.schemas import DeploymentStatusPatch
 from database.models import Base, Deployment
 from services.sandbox_service import SANDBOX_TTL_SECONDS
@@ -82,6 +83,23 @@ def test_sandbox_dispatch_sends_repository_dispatch_payload(monkeypatch):
     assert request["json"]["client_payload"]["image"] == "mpepping/whoami:latest"
     assert request["json"]["client_payload"]["host_port"] == "20009"
     assert "token" not in request["json"]["client_payload"]
+
+
+def test_sandbox_dispatch_failure_returns_json_dependency_error(monkeypatch):
+    engine, db = _session()
+    monkeypatch.setattr("api.routes.sandbox.dispatch_sandbox_deployment", MagicMock(side_effect=RuntimeError("nope")))
+    try:
+        try:
+            create_sandbox_demo(template="whoami", db=db)
+        except Exception as exc:
+            assert getattr(exc, "status_code") == 424
+            assert str(exc.detail) == "nope"
+        else:
+            raise AssertionError("Expected failed dispatch to return dependency error")
+    finally:
+        db.close()
+        Base.metadata.drop_all(bind=engine)
+        engine.dispose()
 
 
 def test_sandbox_status_patch_requires_callback_token(monkeypatch):

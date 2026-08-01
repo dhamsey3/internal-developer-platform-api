@@ -54,6 +54,6 @@ def create_sandbox_demo(
             deployment.last_error = str(exc)
             db.add(deployment)
             db.commit()
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        raise HTTPException(status_code=424, detail=str(exc)) from exc
 
     return _response(deployment, template_name)

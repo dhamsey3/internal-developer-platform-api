@@ -92,4 +92,7 @@ def dispatch_sandbox_deployment(deployment: Deployment) -> None:
         timeout=20,
     )
     if response.status_code != 204:
-        raise RuntimeError(f"GitHub rejected the sandbox dispatch with status {response.status_code}")
+        detail = response.text[:500] if response.text else "no response body"
+        raise RuntimeError(
+            f"GitHub rejected the sandbox dispatch with status {response.status_code}: {detail}"
+        )
