@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     GITHUB_DISPATCH_TOKEN: str = Field(default="", env="GITHUB_DISPATCH_TOKEN")
     DEPLOYMENT_CALLBACK_TOKEN: str = Field(default="", env="DEPLOYMENT_CALLBACK_TOKEN")
     KUBERNETES_NAMESPACE_PREFIX: str = Field(default="tenant", env="KUBERNETES_NAMESPACE_PREFIX")
-    KUBERNETES_DRY_RUN: bool = Field(default=False, env="KUBERNETES_DRY_RUN")
+    KUBERNETES_DRY_RUN: bool = Field(default=True, env="KUBERNETES_DRY_RUN")
     TERRAFORM_DRY_RUN: bool = Field(default=True, env="TERRAFORM_DRY_RUN")
     TERRAFORM_STATE_BUCKET: str = Field(default="replace-me-terraform-state", env="TERRAFORM_STATE_BUCKET")
     TERRAFORM_JOB_BACKEND: str = Field(default="background", env="TERRAFORM_JOB_BACKEND")
