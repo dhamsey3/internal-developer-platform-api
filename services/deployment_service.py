@@ -10,6 +10,7 @@ from api.schemas import DeploymentCreateRequest
 from database.models import Deployment, User
 from services.kubernetes_client import get_k8s_client
 from services.autoscaling_service import create_hpa
+from services.catalog import ensure_image_allowed
 from services.ingress_service import create_ingress
 from services.k8s_service import create_namespace
 from services.service_service import expose_service
@@ -146,6 +147,7 @@ def get_kubernetes_deployment_status(namespace: str, name: str) -> Dict[str, Opt
 
 def provision_application(db: Session, user: User, request: DeploymentCreateRequest) -> Deployment:
     validate_docker_image(request.image)
+    ensure_image_allowed(user, request.image)
     namespace = request.namespace or _default_namespace(user, request.name)
     ingress_host = request.ingress_host or _default_host(user, request.name)
     deployment = Deployment(

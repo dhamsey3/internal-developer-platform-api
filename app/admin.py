@@ -3,7 +3,7 @@ import getpass
 
 from auth.jwt_utils import get_password_hash
 from database.models import User
-from database.session import SessionLocal
+from database.session import SessionLocal, init_db
 
 
 def upsert_admin(username: str) -> None:
@@ -34,6 +34,8 @@ def main() -> None:
     parser.add_argument("--username", default="admin")
     args = parser.parse_args()
     if args.command == "create":
+        # The tables may not exist yet if the API has never started on this database.
+        init_db()
         upsert_admin(args.username)
 
 

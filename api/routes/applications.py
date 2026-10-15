@@ -16,6 +16,7 @@ from services.application_service import (
     mark_stale_application_deployments,
     upsert_application_runtime_deployment,
 )
+from services.catalog import ImageNotAllowedError, ensure_image_allowed
 from services.destination_service import destination_readiness
 
 router = APIRouter()
@@ -88,6 +89,8 @@ def create_application_route(
 ):
     try:
         application = create_application(db, current_user, request)
+    except ImageNotAllowedError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     destination = db.query(Destination).filter(Destination.id == application.destination_id).one()
@@ -109,6 +112,10 @@ def deploy_application_route(
         raise HTTPException(status_code=404, detail="Application not found")
     if application.source_type != "container_image":
         raise HTTPException(status_code=409, detail="Repository builds are not configured yet")
+    try:
+        ensure_image_allowed(current_user, application.image)
+    except ImageNotAllowedError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
     destination = db.query(Destination).filter(Destination.id == application.destination_id).one()
     try:
         dispatch_application_deployment(db, application, destination)

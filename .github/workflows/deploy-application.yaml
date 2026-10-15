@@ -48,6 +48,11 @@ jobs:
       IDP_API_URL: ${{ vars.IDP_API_URL }}
       APPLICATION_BASE_URL: ${{ vars.APPLICATION_BASE_URL }}
       APPLICATION_BIND_ADDRESS: ${{ vars.APPLICATION_BIND_ADDRESS || '127.0.0.1' }}
+      # Every container this workflow starts gets these limits, so one deployment
+      # cannot starve the VM it shares with everything else.
+      CONTAINER_MEMORY_LIMIT: ${{ vars.CONTAINER_MEMORY_LIMIT || '512m' }}
+      CONTAINER_CPU_LIMIT: ${{ vars.CONTAINER_CPU_LIMIT || '1' }}
+      CONTAINER_PIDS_LIMIT: ${{ vars.CONTAINER_PIDS_LIMIT || '512' }}
       CALLBACK_TOKEN: ${{ secrets.DEPLOYMENT_CALLBACK_TOKEN }}
     steps:
       - name: Validate deployment request
@@ -55,10 +60,16 @@ jobs:
           [[ "$APPLICATION_ID" =~ ^[0-9]+$ ]]
           [[ "$APPLICATION_NAME" =~ ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$ ]]
           [[ "$APPLICATION_IMAGE" =~ ^[A-Za-z0-9./:@_-]+$ ]]
-          [[ "$CONTAINER_PORT" =~ ^[0-9]+$ ]] && (( CONTAINER_PORT >= 1 && CONTAINER_PORT <= 65535 ))
-          [[ "$HOST_PORT" =~ ^[0-9]+$ ]] && (( HOST_PORT >= 10000 && HOST_PORT <= 65535 ))
+          [[ "$CONTAINER_PORT" =~ ^[0-9]+$ ]]
+          (( CONTAINER_PORT >= 1 && CONTAINER_PORT <= 65535 ))
+          [[ "$HOST_PORT" =~ ^[0-9]+$ ]]
+          (( HOST_PORT >= 10000 && HOST_PORT <= 65535 ))
           [[ "$ATTEMPT_ID" =~ ^[a-f0-9]{32}$ ]]
           [[ "$APPLICATION_BIND_ADDRESS" =~ ^[0-9.]+$ ]]
+          [[ "$CONTAINER_MEMORY_LIMIT" =~ ^[0-9]+[mg]$ ]]
+          [[ "$CONTAINER_CPU_LIMIT" =~ ^[0-9]+(\.[0-9]+)?$ ]]
+          [[ "$CONTAINER_PIDS_LIMIT" =~ ^[0-9]+$ ]]
+          (( CONTAINER_PIDS_LIMIT >= 32 ))
           test -n "$IDP_API_URL"
           test -n "$CALLBACK_TOKEN"
 
@@ -96,6 +107,10 @@ jobs:
               docker run -d \
                 --name "idp-db-$APPLICATION_ID" \
                 --restart unless-stopped \
+                --memory "$CONTAINER_MEMORY_LIMIT" \
+                --cpus "$CONTAINER_CPU_LIMIT" \
+                --pids-limit "$CONTAINER_PIDS_LIMIT" \
+                --security-opt no-new-privileges \
                 --network idp-apps \
                 --env-file "$secret_dir/postgres.env" \
                 --volume "idp-db-$APPLICATION_ID:/var/lib/postgresql/data" \
@@ -130,6 +145,10 @@ jobs:
             docker run -d \
               --name "$container_name" \
               --restart unless-stopped \
+              --memory "$CONTAINER_MEMORY_LIMIT" \
+              --cpus "$CONTAINER_CPU_LIMIT" \
+              --pids-limit "$CONTAINER_PIDS_LIMIT" \
+              --security-opt no-new-privileges \
               --network idp-apps \
               --env-file "$secret_file" \
               --label "idp.application-id=$APPLICATION_ID" \

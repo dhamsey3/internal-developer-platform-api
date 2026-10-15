@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from api.schemas import SandboxDemoRequest, SandboxDemoResponse
 from database.session import get_db
-from services.sandbox_service import SANDBOX_TTL_SECONDS
+from services.sandbox_service import SANDBOX_TTL_SECONDS, SandboxCapacityError
 from services.sandbox_service import create_sandbox_deployment, dispatch_sandbox_deployment
 
 router = APIRouter()
@@ -43,17 +43,31 @@ def create_sandbox_demo(
     template_name = template or (request.template if request else None)
     if template_name is None:
         raise HTTPException(status_code=422, detail="template is required")
+    deployment = None
     try:
         deployment = create_sandbox_deployment(db, template_name)
         dispatch_sandbox_deployment(deployment)
+    except SandboxCapacityError as exc:
+        raise HTTPException(
+            status_code=429,
+            detail=str(exc),
+            headers={"Retry-After": str(exc.retry_after_seconds)},
+        ) from exc
     except ValueError as exc:
+        _mark_failed(db, deployment, exc)
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except RuntimeError as exc:
-        if "deployment" in locals():
-            deployment.status = "failed"
-            deployment.last_error = str(exc)
-            db.add(deployment)
-            db.commit()
+        _mark_failed(db, deployment, exc)
         raise HTTPException(status_code=424, detail=str(exc)) from exc
 
     return _response(deployment, template_name)
+
+
+def _mark_failed(db: Session, deployment, exc: Exception) -> None:
+    """A sandbox that was never dispatched must not hold one of the capped slots."""
+    if deployment is None:
+        return
+    deployment.status = "failed"
+    deployment.last_error = str(exc)
+    db.add(deployment)
+    db.commit()

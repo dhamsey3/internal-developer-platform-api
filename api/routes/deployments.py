@@ -17,6 +17,7 @@ from services.deployment_service import (
     provision_application,
 )
 from services.application_service import mark_stale_runtime_deployments
+from services.catalog import ImageNotAllowedError
 from services.providers.factory import get_deployment_provider
 
 router = APIRouter()
@@ -89,7 +90,12 @@ def create_deployment_route(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return provision_application(db, current_user, request)
+    try:
+        return provision_application(db, current_user, request)
+    except ImageNotAllowedError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.patch("/{id}", response_model=DeploymentResponse)

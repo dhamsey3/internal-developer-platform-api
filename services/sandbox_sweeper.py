@@ -36,17 +36,31 @@ def sweep_expired_sandboxes(db: Session, now: Optional[datetime] = None) -> int:
         )
         .all()
     )
+    swept = 0
     for deployment in expired:
-        remove_sandbox_container(deployment)
+        try:
+            remove_sandbox_container(deployment)
+        except Exception as exc:
+            # Leave it active so the next sweep retries; marking it expired
+            # here would leave the container running with nothing tracking it.
+            logger.warning("Could not tear down sandbox %s: %s", deployment.id, exc)
+            deployment.metadata_json = {
+                **(deployment.metadata_json or {}),
+                "teardown_error": str(exc),
+                "teardown_attempted_at": now.isoformat(),
+            }
+            db.add(deployment)
+            continue
         deployment.status = "expired"
         deployment.metadata_json = {
             **(deployment.metadata_json or {}),
             "swept_at": now.isoformat(),
         }
         db.add(deployment)
+        swept += 1
     if expired:
         db.commit()
-    return len(expired)
+    return swept
 
 
 async def sandbox_sweeper_loop(interval_seconds: int = SANDBOX_SWEEP_INTERVAL_SECONDS) -> None:

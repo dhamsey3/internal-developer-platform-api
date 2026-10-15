@@ -48,7 +48,7 @@ def test_application_catalog_records_destination_and_resource_gaps():
     Base.metadata.create_all(bind=engine)
     db = test_session()
     try:
-        user = User(username="platform-user", hashed_password="not-used")
+        user = User(username="platform-user", hashed_password="not-used", role="admin")
         destination = Destination(
             name="home-vm",
             kind="linux_docker",
