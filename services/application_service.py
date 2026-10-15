@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from api.schemas import ApplicationCreateRequest
 from database.models import Application, Deployment, Destination, User
+from services.catalog import ensure_image_allowed
 from services.deployment_service import validate_docker_image
 from services.destination_service import destination_readiness, resources_readiness
 
@@ -34,6 +35,7 @@ def create_application(
 
     if request.image:
         validate_docker_image(request.image)
+        ensure_image_allowed(user, request.image)
 
     readiness = destination_readiness(destination)
     requested_resources = request.resource_requests

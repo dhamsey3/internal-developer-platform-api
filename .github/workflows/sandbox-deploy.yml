@@ -35,9 +35,12 @@ jobs:
           [[ "$DEPLOYMENT_ID" =~ ^[0-9]+$ ]]
           [[ "$SANDBOX_NAME" =~ ^sandbox-[a-z0-9-]+-[0-9]+$ ]]
           [[ "$SANDBOX_IMAGE" =~ ^(mpepping/whoami:latest|nginx:1\.25-alpine)$ ]]
-          [[ "$CONTAINER_PORT" =~ ^[0-9]+$ ]] && (( CONTAINER_PORT >= 1 && CONTAINER_PORT <= 65535 ))
-          [[ "$HOST_PORT" =~ ^[0-9]+$ ]] && (( HOST_PORT >= 20000 && HOST_PORT <= 65535 ))
-          [[ "$TTL_SECONDS" =~ ^[0-9]+$ ]] && (( TTL_SECONDS > 0 && TTL_SECONDS <= 900 ))
+          [[ "$CONTAINER_PORT" =~ ^[0-9]+$ ]]
+          (( CONTAINER_PORT >= 1 && CONTAINER_PORT <= 65535 ))
+          [[ "$HOST_PORT" =~ ^[0-9]+$ ]]
+          (( HOST_PORT >= 20000 && HOST_PORT <= 65535 ))
+          [[ "$TTL_SECONDS" =~ ^[0-9]+$ ]]
+          (( TTL_SECONDS > 0 && TTL_SECONDS <= 900 ))
           [[ "$APPLICATION_BIND_ADDRESS" =~ ^[0-9.]+$ ]]
           test -n "$IDP_API_URL"
           test -n "$CALLBACK_TOKEN"

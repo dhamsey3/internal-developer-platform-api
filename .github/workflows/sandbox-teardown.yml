@@ -1,0 +1,53 @@
+name: Teardown Sandbox
+
+# The API container cannot reach the runner's Docker, so the sandbox sweeper
+# asks this workflow to remove expired sandbox containers.
+on:
+  repository_dispatch:
+    types: [teardown_sandbox]
+  workflow_dispatch:
+    inputs:
+      deployment_id:
+        description: Sandbox deployment ID, or "all" to remove every sandbox container on the runner
+        required: true
+        default: all
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  # Same group as Deploy Sandbox, so tearing down cancels a deploy still in progress.
+  group: sandbox-${{ github.event.client_payload.deployment_id || inputs.deployment_id }}
+  cancel-in-progress: true
+
+jobs:
+  teardown:
+    name: Remove sandbox container
+    runs-on: [self-hosted, linux, idp-vm]
+    timeout-minutes: 5
+    env:
+      DEPLOYMENT_ID: ${{ github.event.client_payload.deployment_id || inputs.deployment_id }}
+    steps:
+      - name: Validate teardown request
+        run: |
+          [[ "$DEPLOYMENT_ID" =~ ^([0-9]+|all)$ ]]
+          if [ "$DEPLOYMENT_ID" = "all" ] && [ "$GITHUB_EVENT_NAME" != "workflow_dispatch" ]; then
+            echo "Removing every sandbox is only allowed from a manual run"
+            exit 1
+          fi
+
+      - name: Remove sandbox containers
+        run: |
+          filters=(--filter "label=idp.sandbox=true")
+          if [ "$DEPLOYMENT_ID" != "all" ]; then
+            filters+=(--filter "label=idp.deployment-id=$DEPLOYMENT_ID")
+          fi
+          containers="$(docker ps --all --quiet "${filters[@]}")"
+          if [ -z "$containers" ]; then
+            echo "No sandbox containers to remove"
+            exit 0
+          fi
+          echo "Removing sandbox containers: $(echo "$containers" | tr '\n' ' ')"
+          echo "$containers" | xargs docker rm --force >/dev/null
+          docker image prune --force --filter "until=24h" >/dev/null 2>&1 || true

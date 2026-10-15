@@ -1,9 +1,16 @@
+import logging
+import secrets
 from functools import lru_cache
 from pydantic import BaseSettings, Field, validator
 
 
+logger = logging.getLogger(__name__)
+
 PRODUCTION_ENVIRONMENTS = {"production", "prod", "staging"}
 DEFAULT_SECRET_KEY = "change-me-in-production"
+# Values published in this repository. Anyone can sign tokens with them, so
+# they are treated exactly like an unset key.
+PLACEHOLDER_SECRET_KEYS = {"", DEFAULT_SECRET_KEY, "replace-with-a-long-random-secret"}
 
 
 class Settings(BaseSettings):
@@ -13,11 +20,11 @@ class Settings(BaseSettings):
     DEBUG: bool = Field(default=True, env="APP_DEBUG")
     DATABASE_URL: str = Field(default="sqlite:///./idp.db", env="DATABASE_URL")
     REDIS_URL: str = Field(default="redis://localhost:6379/0", env="REDIS_URL")
-    SECRET_KEY: str = Field(default=DEFAULT_SECRET_KEY, env="SECRET_KEY")
+    SECRET_KEY: str = Field(default="", env="SECRET_KEY")
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=60, env="ACCESS_TOKEN_EXPIRE_MINUTES")
     ALLOWED_ORIGINS: str = Field(default="http://localhost:8000,http://127.0.0.1:8000", env="ALLOWED_ORIGINS")
-    ENABLE_PUBLIC_REGISTRATION: bool = Field(default=True, env="ENABLE_PUBLIC_REGISTRATION")
+    ENABLE_PUBLIC_REGISTRATION: bool = Field(default=False, env="ENABLE_PUBLIC_REGISTRATION")
     AWS_REGION: str = Field(default="us-east-1", env="AWS_REGION")
     DEFAULT_INGRESS_DOMAIN: str = Field(default="apps.local", env="DEFAULT_INGRESS_DOMAIN")
     DEFAULT_DESTINATION_NAME: str = Field(default="home-vm", env="DEFAULT_DESTINATION_NAME")
@@ -40,16 +47,32 @@ class Settings(BaseSettings):
     RATE_LIMIT_REQUESTS_PER_HOUR: int = Field(default=100, env="RATE_LIMIT_REQUESTS_PER_HOUR")
     REQUIRE_AUTH_FOR_PLATFORM_APIS: bool = Field(default=True, env="REQUIRE_AUTH_FOR_PLATFORM_APIS")
     ENABLE_SANDBOX_SWEEPER: bool = Field(default=True, env="ENABLE_SANDBOX_SWEEPER")
+    MAX_ACTIVE_SANDBOXES: int = Field(default=3, env="MAX_ACTIVE_SANDBOXES")
     PREVIEW_ROUTING_ENABLED: bool = Field(default=False, env="PREVIEW_ROUTING_ENABLED")
     PREVIEW_ROUTING_DOMAIN: str = Field(default="127.0.0.1.nip.io", env="PREVIEW_ROUTING_DOMAIN")
     PREVIEW_ROUTING_SCHEME: str = Field(default="http", env="PREVIEW_ROUTING_SCHEME")
     PREVIEW_ROUTING_PORT: int = Field(default=0, env="PREVIEW_ROUTING_PORT")
 
     @validator("SECRET_KEY")
-    def require_strong_secret_for_non_local(cls, value, values):
+    def require_unguessable_secret(cls, value, values):
         environment = values.get("ENVIRONMENT", "local").lower()
-        if environment in PRODUCTION_ENVIRONMENTS and (value == DEFAULT_SECRET_KEY or len(value) < 32):
-            raise ValueError("SECRET_KEY must be changed to a random value of at least 32 characters")
+        production_like = environment in PRODUCTION_ENVIRONMENTS
+        if value in PLACEHOLDER_SECRET_KEYS:
+            if production_like:
+                raise ValueError("SECRET_KEY must be set to a random value of at least 32 characters")
+            logger.warning(
+                "SECRET_KEY is not set (or is a published placeholder); using a random key for this "
+                "process. Tokens stop working when the app restarts. Set SECRET_KEY to keep sessions."
+            )
+            return secrets.token_urlsafe(48)
+        if production_like and len(value) < 32:
+            raise ValueError("SECRET_KEY must be set to a random value of at least 32 characters")
+        return value
+
+    @validator("MAX_ACTIVE_SANDBOXES")
+    def validate_max_active_sandboxes(cls, value):
+        if value < 0:
+            raise ValueError("MAX_ACTIVE_SANDBOXES must be 0 or more")
         return value
 
     @validator("TERRAFORM_JOB_BACKEND")

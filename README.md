@@ -73,6 +73,7 @@ cp .env.example .env
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+python -m app.admin create --username admin   # registration is off by default
 uvicorn app.main:app --reload
 
 # If venv creation fails on Debian/Ubuntu:
@@ -226,6 +227,9 @@ The runner workflow:
 - keeps one persistent Docker volume per requested PostgreSQL database
 - generates PostgreSQL credentials on the VM and stores them in a `0600` environment file
 - injects `DATABASE_URL` into the application without sending the password through the API or GitHub payload
+- limits every container to `CONTAINER_MEMORY_LIMIT` (default `512m`), `CONTAINER_CPU_LIMIT` (default `1`) and `CONTAINER_PIDS_LIMIT` (default `512`), adjustable as repository variables, and starts it with `no-new-privileges`
+
+Sandbox demos run on the same runner. The API's sweeper cannot reach the runner's Docker, so when a sandbox expires it dispatches the **Teardown Sandbox** workflow, which removes the container. If the dispatch fails, the sandbox stays active and the next sweep retries. To remove sandbox containers left behind by older versions, run **Actions > Teardown Sandbox > Run workflow** once with `deployment_id` set to `all`; this also stops any sandbox that is running at that moment.
 
 The VM-managed environment file is an initial single-server secret adapter, not a replacement for a managed secrets service. AWS deployments should use AWS Secrets Manager or an equivalent external secret provider.
 
@@ -291,7 +295,7 @@ tests/            Unit tests
 
 ### Authentication
 
-- `POST /auth/register` - Register a new user
+- `POST /auth/register` - Register a new user (only when `ENABLE_PUBLIC_REGISTRATION=true`; off by default)
 - `POST /auth/login` - Authenticate and receive JWT token
 - `GET /auth/me` - Get current user info
 
@@ -309,6 +313,8 @@ tests/            Unit tests
 
 ### Kubernetes Operations
 
+Admin only: these act on the whole cluster, not on the caller's own resources.
+
 - `POST /kubernetes/namespace/create` - Create a namespace
 - `POST /kubernetes/service/expose` - Expose a service
 - `POST /kubernetes/autoscaling/create` - Configure auto-scaling
@@ -316,9 +322,9 @@ tests/            Unit tests
 
 ### Monitoring
 
-- `GET /monitoring/cluster/health` - Get cluster health status
+- `GET /monitoring/cluster/health` - Get cluster health status (admin only)
 - `GET /monitoring/metrics` - Prometheus metrics endpoint
-- `GET /monitoring/logs/{pod}?namespace=default` - Retrieve pod logs
+- `GET /monitoring/logs/{pod}?namespace=default` - Retrieve pod logs (admin only)
 
 ### Documentation
 
@@ -342,7 +348,7 @@ For local development without a Kubernetes cluster or Terraform credentials, con
 KUBERNETES_DRY_RUN=true
 TERRAFORM_DRY_RUN=true
 DATABASE_URL=sqlite:///./idp.db
-ENABLE_PUBLIC_REGISTRATION=true
+ENABLE_PUBLIC_REGISTRATION=true   # local only; keep it off on any reachable server
 ```
 
 ### Install & Run
@@ -476,7 +482,12 @@ helm upgrade --install idp-api helm/charts/idp-api \
 - Redis-backed rate limiting with local fallback
 - Non-root Docker container
 - Security headers and restricted CORS origin configuration
-- Production startup validation for weak/default `SECRET_KEY`
+- Tokens are never signed with a published key: in `production`, `prod` or `staging` the app refuses to start without a `SECRET_KEY` of at least 32 characters; anywhere else an unset or placeholder key is replaced by a random per-process key, so sessions end on restart until a real key is set
+- Public registration off by default; create accounts with `python -m app.admin create`
+- Image policy: only admins can deploy images outside the platform catalog (`services/catalog.py`), checked when an application is registered and again when it is deployed
+- Memory, CPU and process limits plus `no-new-privileges` on every container the deployment workflow starts
+- Kubernetes and pod-log APIs restricted to admins
+- The anonymous sandbox demo is capped at `MAX_ACTIVE_SANDBOXES` concurrent sandboxes (default 3; 0 disables it)
 - Helm defaults: public registration disabled, debug disabled, read-only root filesystem, dropped Linux capabilities
 - Kubernetes RBAC and network-policy examples
 - No hardcoded production secret requirement in Helm

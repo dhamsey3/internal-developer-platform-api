@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 
 from api.schemas import AutoscalingRequest, IngressRequest, NamespaceRequest, ServiceExposeRequest
-from auth.rbac import get_current_user
+from auth.rbac import require_role
 from services.autoscaling_service import create_hpa
 from services.ingress_service import create_ingress
 from services.k8s_service import create_namespace
@@ -10,14 +10,14 @@ from services.service_service import expose_service
 router = APIRouter()
 
 @router.post("/namespace/create")
-def create_namespace_route(request: NamespaceRequest, current_user=Depends(get_current_user)):
+def create_namespace_route(request: NamespaceRequest, current_user=Depends(require_role("admin"))):
     success = create_namespace(request.name)
     if success:
         return {"msg": f"Namespace '{request.name}' created."}
     raise HTTPException(status_code=500, detail="Failed to create namespace.")
 
 @router.post("/service/expose")
-def expose_service_route(request: ServiceExposeRequest, current_user=Depends(get_current_user)):
+def expose_service_route(request: ServiceExposeRequest, current_user=Depends(require_role("admin"))):
     success = expose_service(
         namespace=request.namespace,
         name=request.name,
@@ -30,7 +30,7 @@ def expose_service_route(request: ServiceExposeRequest, current_user=Depends(get
     raise HTTPException(status_code=500, detail="Failed to expose service.")
 
 @router.post("/autoscaling/create")
-def create_autoscaling_route(request: AutoscalingRequest, current_user=Depends(get_current_user)):
+def create_autoscaling_route(request: AutoscalingRequest, current_user=Depends(require_role("admin"))):
     success = create_hpa(
         namespace=request.namespace,
         deployment=request.deployment,
@@ -44,7 +44,7 @@ def create_autoscaling_route(request: AutoscalingRequest, current_user=Depends(g
 
 
 @router.post("/ingress/create")
-def create_ingress_route(request: IngressRequest, current_user=Depends(get_current_user)):
+def create_ingress_route(request: IngressRequest, current_user=Depends(require_role("admin"))):
     success = create_ingress(
         namespace=request.namespace,
         name=request.name,

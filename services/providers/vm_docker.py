@@ -21,38 +21,40 @@ def sandbox_container_names(deployment: Deployment) -> list[str]:
     return list(dict.fromkeys(names))
 
 
+def _repository_dispatch(event_type: str, client_payload: dict) -> None:
+    response = httpx.post(
+        f"https://api.github.com/repos/{settings.GITHUB_REPOSITORY}/dispatches",
+        headers={
+            "Accept": "application/vnd.github+json",
+            "Authorization": f"Bearer {settings.GITHUB_DISPATCH_TOKEN}",
+            "X-GitHub-Api-Version": "2022-11-28",
+        },
+        json={"event_type": event_type, "client_payload": client_payload},
+        timeout=20,
+    )
+    if response.status_code != 204:
+        detail = response.text[:500] if response.text else "no response body"
+        accepted_permissions = response.headers.get("x-accepted-github-permissions")
+        if accepted_permissions:
+            detail = f"{detail} Required permissions: {accepted_permissions}"
+        raise RuntimeError(f"GitHub rejected the {event_type} dispatch with status {response.status_code}: {detail}")
+
+
 class VMRunnerProvider(BaseDeploymentProvider):
     def dispatch(self, deployment: Deployment) -> None:
         if not settings.GITHUB_DISPATCH_TOKEN:
             raise ValueError("GitHub sandbox dispatch is not configured")
-        response = httpx.post(
-            f"https://api.github.com/repos/{settings.GITHUB_REPOSITORY}/dispatches",
-            headers={
-                "Accept": "application/vnd.github+json",
-                "Authorization": f"Bearer {settings.GITHUB_DISPATCH_TOKEN}",
-                "X-GitHub-Api-Version": "2022-11-28",
+        _repository_dispatch(
+            "deploy_sandbox",
+            {
+                "deployment_id": str(deployment.id),
+                "name": deployment.name,
+                "image": deployment.image,
+                "container_port": str(deployment.container_port),
+                "host_port": str(deployment.port),
+                "ttl_seconds": str(SANDBOX_TTL_SECONDS),
             },
-            json={
-                "event_type": "deploy_sandbox",
-                "client_payload": {
-                    "deployment_id": str(deployment.id),
-                    "name": deployment.name,
-                    "image": deployment.image,
-                    "container_port": str(deployment.container_port),
-                    "host_port": str(deployment.port),
-                    "ttl_seconds": str(SANDBOX_TTL_SECONDS),
-                },
-            },
-            timeout=20,
         )
-        if response.status_code != 204:
-            detail = response.text[:500] if response.text else "no response body"
-            accepted_permissions = response.headers.get("x-accepted-github-permissions")
-            if accepted_permissions:
-                detail = f"{detail} Required permissions: {accepted_permissions}"
-            raise RuntimeError(
-                f"GitHub rejected the sandbox dispatch with status {response.status_code}: {detail}"
-            )
 
     def get_logs(self, deployment: Deployment, tail: int = 100) -> list[str]:
         metadata = deployment.metadata_json or {}
@@ -78,6 +80,16 @@ class VMRunnerProvider(BaseDeploymentProvider):
         return persisted_logs.splitlines() or [TERMINATED_LOG_MESSAGE]
 
     def teardown(self, deployment: Deployment) -> None:
+        """Removes the sandbox container. Raises if the removal could not be requested.
+
+        Sandboxes run on the self-hosted runner's Docker, which the API container
+        cannot reach, so when dispatch is configured the runner removes the
+        container (.github/workflows/sandbox-teardown.yml). Without dispatch the
+        API is a local development process sharing Docker with its sandboxes.
+        """
+        if settings.GITHUB_DISPATCH_TOKEN:
+            _repository_dispatch("teardown_sandbox", {"deployment_id": str(deployment.id)})
+            return
         for container_name in sandbox_container_names(deployment):
             try:
                 subprocess.run(

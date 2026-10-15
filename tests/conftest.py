@@ -4,6 +4,7 @@ import sys
 os.environ.setdefault("DATABASE_URL", "sqlite:///./test_idp.db")
 os.environ.setdefault("ENABLE_SANDBOX_SWEEPER", "false")
 os.environ.setdefault("KUBERNETES_DRY_RUN", "true")
+os.environ.setdefault("ENABLE_PUBLIC_REGISTRATION", "true")
 
 import pytest
 from fastapi.testclient import TestClient
